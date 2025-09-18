@@ -35,7 +35,7 @@ export async function buildMessage(
   return ensureMaxLength(result, options.maxMessageLength);
 }
 
-function buildDefaultMessage(
+export function buildDefaultMessage(
   input: FormatMessageInput,
   options: NormalizedOptions,
 ): FormatMessageResult {
@@ -140,12 +140,12 @@ function extractExtras(
 }
 
 function ensureMaxLength(result: FormatMessageResult, maxLength: number): FormatMessageResult {
-  const { text, extra } = result;
+  const { text, extra, method } = result;
   const { text: trimmed, truncated } = truncate(text, maxLength);
   if (!truncated) {
-    return { text: trimmed, extra };
+    return { text: trimmed, extra, method };
   }
   const notice = `\n\n<b>Сообщение обрезано из-за ограничения Telegram</b>`;
   const { text: finalText } = truncate(trimmed + notice, maxLength);
-  return { text: finalText, extra };
+  return { text: finalText, extra, method };
 }

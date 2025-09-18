@@ -1,9 +1,10 @@
-import {
+﻿import {
   NormalizedOptions,
   RawChatTarget,
   TelegramChatTarget,
   TelegramTransportOptions,
 } from './types';
+import { createMediaFormatter } from './presets';
 
 const TELEGRAM_BASE_URL = 'https://api.telegram.org';
 const DEFAULT_CONTEXT_KEYS = ['context', 'ctx'];
@@ -71,7 +72,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     retryInitialDelay,
     retryBackoffFactor,
     retryMaxDelay,
-    formatMessage: options.formatMessage,
+    formatMessage: options.formatMessage || createMediaFormatter(),
     onDeliveryError: options.onDeliveryError,
     send: options.send,
     headings: {
