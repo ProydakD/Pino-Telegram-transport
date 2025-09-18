@@ -1,4 +1,4 @@
-# Pino Telegram transport
+﻿# Pino Telegram transport
 
 Транспорт для [Pino](https://github.com/pinojs/pino), отправляющий логи в Telegram Bot API. Поддерживает личные чаты, группы и темы в супергруппах, а также выводит пользовательский контекст в сообщении.
 
@@ -25,6 +25,7 @@ const logger = pino({
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
       chatId: [process.env.TELEGRAM_CHAT_ID!, { chatId: -1001234567890, threadId: 42 }],
       minDelayBetweenMessages: 200,
+      retryAttempts: 3,
     },
   },
 });
@@ -32,9 +33,9 @@ const logger = pino({
 logger.info({ context: { requestId: '42' } }, 'Привет, Telegram!');
 ```
 
-## Формат сообщения
+## Поведение по умолчанию
 
-По умолчанию транспорт формирует текст вида:
+Транспорт формирует текст вида:
 
 ```
 ℹ️ INFO — <b>Message</b>
@@ -43,11 +44,18 @@ logger.info({ context: { requestId: '42' } }, 'Привет, Telegram!');
 <pre>{"requestId":"42"}</pre>
 ```
 
-При наличии `err` в логе добавляется блок <b>Error</b> с полями `message` и `stack`. Дополнительные свойства записи (кроме `level`, `time`, `msg`, `context`, `err`) попадают в секцию <b>Extras</b>.
+При наличии `err` в логе добавляется блок **Error** с полями `message` и `stack`. Дополнительные свойства записи (кроме `level`, `time`, `msg`, `context`, `err`) попадают в секцию **Extras**.
 
-### Кастомизация заголовков
+## Повторы отправки
 
-Для замены подписей по умолчанию (Time, Context, Error, Extras) используйте опцию `headings`:
+- При ответах Telegram `429` и `>=500` сообщение отправляется повторно.
+- Пауза между попытками управляется опциями `retryAttempts`, `retryInitialDelay`, `retryBackoffFactor`, `retryMaxDelay`.
+- Если Bot API возвращает `retry_after`, транспорт использует его как минимальную задержку.
+- Чтобы отключить повторные попытки, задайте `retryAttempts: 1`.
+
+## Кастомизация
+
+### Заголовки
 
 ```ts
 pino({
@@ -69,7 +77,7 @@ pino({
 
 Пара ключей можно задавать выборочно — остальные останутся английскими по умолчанию.
 
-### Кастомизация секции Extras
+### Секция Extras
 
 По умолчанию Extras содержит все поля лог-записи, кроме зарезервированных (`level`, `time`, `msg`, `context`, `err`).\nИспользуйте опции `includeExtras` и `extraKeys`, чтобы отключить блок или ограничить набор полей.
 

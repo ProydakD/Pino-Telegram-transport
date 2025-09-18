@@ -1,4 +1,4 @@
-import { escapeHtml, formatTimestamp, truncate } from './utils';
+﻿import { escapeHtml, formatTimestamp, truncate } from './utils';
 import { FormatMessageInput, FormatMessageResult, NormalizedOptions, PinoLog } from './types';
 
 const LEVEL_LABELS: Record<number, string> = {
@@ -8,6 +8,15 @@ const LEVEL_LABELS: Record<number, string> = {
   40: 'WARN',
   50: 'ERROR',
   60: 'FATAL',
+};
+
+const LEVEL_ICONS: Record<string, string> = {
+  TRACE: '🔍',
+  DEBUG: '🐛',
+  INFO: 'ℹ️',
+  WARN: '⚠️',
+  ERROR: '❌',
+  FATAL: '💀',
 };
 
 const RESERVED_FIELDS = new Set(['level', 'time', 'msg', 'context', 'err']);
@@ -32,14 +41,13 @@ function buildDefaultMessage(
 ): FormatMessageResult {
   const { log } = input;
   const levelLabel = resolveLevel(log.level);
+  const levelIcon = LEVEL_ICONS[levelLabel] ?? '';
   const timestamp = formatTimestamp(log.time);
   const message = sanitizeMessage(log.msg ?? 'Message is missing');
   const headings = options.headings;
 
-  const parts: string[] = [
-    `${levelLabel} — <b>${message}</b>`,
-    `<b>${escapeHtml(headings.time)}:</b> ${escapeHtml(timestamp)}`,
-  ];
+  const header = `${levelIcon ? `${levelIcon} ` : ''}${levelLabel} — <b>${message}</b>`;
+  const parts: string[] = [header, `<b>${escapeHtml(headings.time)}:</b> ${escapeHtml(timestamp)}`];
 
   const context = extractContext(log, options);
   if (context) {

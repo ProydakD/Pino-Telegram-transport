@@ -1,6 +1,8 @@
-# Использование транспорта
+﻿# Использование транспорта
 
 ## Базовая интеграция с Pino
+
+> ⚠️ Если планируете добавлять функции в опции (например, `onDeliveryError`), отключите воркер (`worker: { enabled: false }`), чтобы избежать `DataCloneError`. Альтернатива — создать транспорт напрямую: `const stream = telegramTransport(options); const logger = pino({}, stream);`
 
 ```ts
 import pino from 'pino';
@@ -104,6 +106,29 @@ const logger = pino({
 ```ts
 extraKeys: ['requestId', 'origin'],
 ```
+
+## Повторы отправки
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      retryAttempts: 4,
+      retryInitialDelay: 500,
+      retryBackoffFactor: 2,
+      retryMaxDelay: 5000,
+      onDeliveryError(error, payload) {
+        console.error('Failed to deliver log to Telegram', payload?.chat_id, error);
+      },
+    },
+  },
+});
+```
+
+См. examples/retry.ts для полноценного примера с явным транспортом.
 
 ## Настройка доставок
 

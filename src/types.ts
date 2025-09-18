@@ -51,6 +51,14 @@ export interface TelegramTransportOptions {
   send?: (payload: TelegramMessagePayload) => Promise<void>;
   /** Кастомные заголовки для форматтера по умолчанию. */
   headings?: Partial<FormatterHeadings>;
+  /** Количество попыток доставки (включая первую). */
+  retryAttempts?: number;
+  /** Стартовая пауза перед повторной попыткой (мс). */
+  retryInitialDelay?: number;
+  /** Множитель экспоненциального backoff. */
+  retryBackoffFactor?: number;
+  /** Максимальная пауза между попытками (мс). */
+  retryMaxDelay?: number;
 }
 
 export interface FormatMessageInput {
@@ -92,6 +100,10 @@ export interface NormalizedOptions {
   extraKeys?: string[];
   maxMessageLength: number;
   minDelayBetweenMessages: number;
+  retryAttempts: number;
+  retryInitialDelay: number;
+  retryBackoffFactor: number;
+  retryMaxDelay: number;
   formatMessage?: TelegramTransportOptions['formatMessage'];
   onDeliveryError?: TelegramTransportOptions['onDeliveryError'];
   send?: TelegramTransportOptions['send'];

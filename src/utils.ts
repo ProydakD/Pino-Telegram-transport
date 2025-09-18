@@ -16,6 +16,10 @@ const DEFAULT_HEADINGS = Object.freeze({
   extras: 'Extras',
 });
 const DEFAULT_INCLUDE_EXTRAS = true;
+const DEFAULT_RETRY_ATTEMPTS = 3;
+const DEFAULT_RETRY_INITIAL_DELAY = 500;
+const DEFAULT_RETRY_BACKOFF = 2;
+const DEFAULT_RETRY_MAX_DELAY = 10000;
 
 /**
  * Проверяет и нормализует пользовательские опции транспорта.
@@ -43,6 +47,14 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
       ? [options.contextKeys]
       : DEFAULT_CONTEXT_KEYS;
 
+  const retryAttempts = Math.max(1, Math.floor(options.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS));
+  const retryInitialDelay = Math.max(0, options.retryInitialDelay ?? DEFAULT_RETRY_INITIAL_DELAY);
+  const retryBackoffFactor = Math.max(1, options.retryBackoffFactor ?? DEFAULT_RETRY_BACKOFF);
+  const retryMaxDelay = Math.max(
+    retryInitialDelay,
+    options.retryMaxDelay ?? DEFAULT_RETRY_MAX_DELAY,
+  );
+
   return {
     botToken,
     targets,
@@ -55,6 +67,10 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     extraKeys: options.extraKeys,
     maxMessageLength: options.maxMessageLength ?? DEFAULT_MAX_LENGTH,
     minDelayBetweenMessages: options.minDelayBetweenMessages ?? DEFAULT_MIN_DELAY,
+    retryAttempts,
+    retryInitialDelay,
+    retryBackoffFactor,
+    retryMaxDelay,
     formatMessage: options.formatMessage,
     onDeliveryError: options.onDeliveryError,
     send: options.send,

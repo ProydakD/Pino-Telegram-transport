@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import telegramTransport from '../src';
+﻿import { afterEach, describe, expect, it, vi } from 'vitest';
+import telegramTransport, { TelegramDeliveryError } from '../src';
 import { TelegramMessagePayload, TelegramTransportOptions } from '../src/types';
 
 const TOKEN = '123:ABC';
@@ -52,8 +52,7 @@ describe('pino-telegram transport', () => {
     const recorder = createRecorder();
     const { stream } = createTransport({}, recorder);
 
-    stream.write(`${JSON.stringify({ level: 30, msg: 'Hello', time: 1700000000000 })}
-`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Hello', time: 1700000000000 })}\n`);
     stream.end();
 
     await flush();
@@ -70,8 +69,7 @@ describe('pino-telegram transport', () => {
     const { stream } = createTransport({}, recorder);
 
     stream.write(
-      `${JSON.stringify({ level: 40, msg: 'Attention', context: { userId: 42 }, time: 1700000000100 })}
-`,
+      `${JSON.stringify({ level: 40, msg: 'Attention', context: { userId: 42 }, time: 1700000000100 })}\n`,
     );
     stream.end();
 
@@ -85,8 +83,7 @@ describe('pino-telegram transport', () => {
   it('gracefully disables transport when botToken missing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const stream = telegramTransport({ chatId: 111 } as unknown as TelegramTransportOptions);
-    stream.write(`${JSON.stringify({ level: 30, msg: 'noop' })}
-`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'noop' })}\n`);
     stream.end();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('transport disabled'));
     warn.mockRestore();
@@ -95,12 +92,12 @@ describe('pino-telegram transport', () => {
   it('gracefully disables transport when chat is missing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const stream = telegramTransport({ botToken: TOKEN } as unknown as TelegramTransportOptions);
-    stream.write(`${JSON.stringify({ level: 30, msg: 'noop' })}
-`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'noop' })}\n`);
     stream.end();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('transport disabled'));
     warn.mockRestore();
   });
+
   it('includes extras block when additional fields present', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport({}, recorder);
@@ -158,8 +155,7 @@ describe('pino-telegram transport', () => {
     );
 
     stream.write(
-      `${JSON.stringify({ level: 30, msg: 'Custom headings', context: { foo: 'bar' } })}
-`,
+      `${JSON.stringify({ level: 30, msg: 'Custom headings', context: { foo: 'bar' } })}\n`,
     );
     stream.end();
 
@@ -181,8 +177,7 @@ describe('pino-telegram transport', () => {
       recorder,
     );
 
-    stream.write(`${JSON.stringify({ level: 30, msg: 'Multi target' })}
-`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Multi target' })}\n`);
     stream.end();
 
     await flush();
@@ -207,10 +202,8 @@ describe('pino-telegram transport', () => {
       recorder,
     );
 
-    stream.write(`${JSON.stringify({ level: 30, msg: 'First' })}
-`);
-    stream.write(`${JSON.stringify({ level: 30, msg: 'Second' })}
-`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'First' })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Second' })}\n`);
 
     await vi.advanceTimersByTimeAsync(200);
     await flush();
@@ -220,5 +213,129 @@ describe('pino-telegram transport', () => {
 
     expect(recorder.payloads).toHaveLength(2);
     expect(recorder.timestamps[1] - recorder.timestamps[0]).toBeGreaterThanOrEqual(200);
+  });
+
+  it('retries on 429 responses with retry_after hint', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    const recorder = createRecorder();
+    const originalSend = recorder.send;
+    const attempts: number[] = [];
+
+    recorder.send = vi.fn(async (payload) => {
+      attempts.push(Date.now());
+      if (attempts.length < 3) {
+        throw new TelegramDeliveryError(
+          'Too many requests',
+          { ok: false, error_code: 429, parameters: { retry_after: 1 } },
+          429,
+        );
+      }
+      await originalSend(payload);
+    });
+
+    const { stream } = createTransport(
+      {
+        minDelayBetweenMessages: 0,
+        retryAttempts: 3,
+        retryInitialDelay: 200,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Retry me' })}\n`);
+    stream.end();
+
+    await flush();
+    expect(attempts.length).toBeGreaterThanOrEqual(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.runOnlyPendingTimersAsync();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.runOnlyPendingTimersAsync();
+
+    await flush();
+
+    expect(recorder.send).toHaveBeenCalledTimes(3);
+    expect(recorder.payloads).toHaveLength(1);
+    expect(attempts).toHaveLength(3);
+    expect(attempts[1] - attempts[0]).toBeGreaterThanOrEqual(1000);
+    expect(attempts[2] - attempts[1]).toBeGreaterThanOrEqual(1000);
+  });
+
+  it('applies exponential backoff for server errors', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    const recorder = createRecorder();
+    const originalSend = recorder.send;
+    const attempts: number[] = [];
+
+    recorder.send = vi.fn(async (payload) => {
+      attempts.push(Date.now());
+      if (attempts.length < 3) {
+        throw new TelegramDeliveryError('Server error', { ok: false, error_code: 500 }, 500);
+      }
+      await originalSend(payload);
+    });
+
+    const { stream } = createTransport(
+      {
+        minDelayBetweenMessages: 0,
+        retryAttempts: 3,
+        retryInitialDelay: 200,
+        retryBackoffFactor: 2,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Backoff' })}\n`);
+    stream.end();
+
+    await flush();
+    expect(attempts.length).toBeGreaterThanOrEqual(1);
+
+    await vi.advanceTimersByTimeAsync(200);
+    await vi.runOnlyPendingTimersAsync();
+
+    await vi.advanceTimersByTimeAsync(400);
+    await vi.runOnlyPendingTimersAsync();
+
+    await flush();
+
+    expect(recorder.send).toHaveBeenCalledTimes(3);
+    expect(recorder.payloads).toHaveLength(1);
+    expect(attempts[1] - attempts[0]).toBeGreaterThanOrEqual(200);
+    expect(attempts[2] - attempts[1]).toBeGreaterThanOrEqual(400);
+  });
+
+  it('does not retry non-retryable errors', async () => {
+    const recorder: Recorder = {
+      payloads: [],
+      timestamps: [],
+      send: vi.fn(async () => {
+        throw new TelegramDeliveryError('Bad request', { ok: false, error_code: 400 }, 400);
+      }),
+    };
+    const onDeliveryError = vi.fn();
+
+    const { stream } = createTransport(
+      {
+        onDeliveryError,
+        retryAttempts: 3,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Fail fast' })}\n`);
+    stream.end();
+
+    await flush();
+
+    expect(recorder.send).toHaveBeenCalledTimes(1);
+    expect(onDeliveryError).toHaveBeenCalledTimes(1);
+    expect(onDeliveryError.mock.calls[0][0]).toBeInstanceOf(TelegramDeliveryError);
   });
 });

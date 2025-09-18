@@ -1,4 +1,4 @@
-# Примеры и сценарии
+﻿# Примеры и сценарии
 
 Каталог `examples/` содержит готовые сценарии, которые можно запускать через `ts-node`.
 
@@ -31,6 +31,16 @@ npx ts-node examples/basic.ts
 
 ```bash
 npx ts-node examples/custom-formatter.ts
+```
+
+## retry.ts — экспоненциальные повторы
+
+- Демонстрирует опции retryAttempts, retryInitialDelay, retryBackoffFactor и retryMaxDelay.
+- Логирует ошибки доставки через onDeliveryError.
+- Полезен для проверки поведения при 429/5xx и нестабильной сети.
+
+```bash
+npx ts-node examples/retry.ts
 ```
 
 ## custom-send.ts — кастомный отправитель
