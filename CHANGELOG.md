@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.1.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.0.4...v1.1.0) (2025-09-18)
+
+
+### Features
+
+* **transport:** транспорт отключается при отсутствии botToken или chatId ([73037a3](https://github.com/ProydakD/pino-telegram-transport/commit/73037a37d3f889a4e6d3f53db88accc0c839f582))
+
 ### [1.0.4](https://github.com/ProydakD/pino-telegram-transport/compare/v1.0.3...v1.0.4) (2025-09-18)
 
 ### Chores
