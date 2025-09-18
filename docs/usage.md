@@ -171,7 +171,7 @@ logger.error(
 Telegram ограничивает подпись медиа 1024 символами — учитывайте это при формировании `text` или `caption`.
 Для `Buffer` используйте объекты `{ type: 'Buffer', data: number[] }`, которые Pino создаёт при сериализации. См. `examples/media.ts` для рабочей схемы.
 
-## Пользовательский метод отпарвки `send`
+## Пользовательский метод отправки `send`
 
 ```ts
 async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod) {
@@ -180,6 +180,83 @@ async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod)
 ```
 
 Опция `send` позволяет интегрировать собственную очередь или HTTP-клиент. Функции с одним аргументом остаются совместимыми — второй параметр будет отброшен.
+
+## Интеграция С Фреймворками
+
+### NestJS (nestjs-pino)
+
+```ts
+import { Module } from '@nestjs/common';
+import { LoggerModule } from 'nestjs-pino';
+import { createNestLoggerOptions } from 'pino-telegram-logger-transport';
+
+@Module({
+  imports: [
+    LoggerModule.forRoot(
+      createNestLoggerOptions(
+        {
+          botToken: process.env.TELEGRAM_BOT_TOKEN!,
+          chatId: process.env.TELEGRAM_CHAT_ID!,
+        },
+        {
+          pinoHttp: {
+            level: 'info',
+          },
+        },
+      ),
+    ),
+  ],
+})
+export class AppModule {}
+```
+
+- Передавай дополнительные опции `LoggerModule` вторым аргументом.
+- Отключай буферизацию HTTP-запросов в `pinoHttp`, если она включена.
+
+### Fastify
+
+```ts
+import fastify from 'fastify';
+import { createFastifyLoggerOptions } from 'pino-telegram-logger-transport';
+
+const app = fastify({
+  logger: createFastifyLoggerOptions(
+    {
+      botToken: process.env.TELEGRAM_BOT_TOKEN!,
+      chatId: process.env.TELEGRAM_CHAT_ID!,
+    },
+    { level: 'warn' },
+  ),
+});
+```
+
+- Передавай `baseOptions` для настройки уровня и форматтеров Fastify.
+- Отключай встроенный транспорт Fastify, если передавал его ранее, чтобы не дублировать доставку.
+
+### AWS Lambda
+
+```ts
+import pino from 'pino';
+import { createLambdaLoggerOptions } from 'pino-telegram-logger-transport';
+
+const logger = pino(
+  createLambdaLoggerOptions(
+    {
+      botToken: process.env.TELEGRAM_BOT_TOKEN!,
+      chatId: process.env.TELEGRAM_CHAT_ID!,
+    },
+    { level: 'info' },
+  ),
+);
+
+export const handler = async (event: unknown) => {
+  logger.info({ event }, 'Lambda вызвана');
+  // бизнес-логика
+};
+```
+
+- Используй вторым аргументом любые опции `pino`, например `messageKey` или `base`.
+- Добавь `await logger.flush?.()` перед завершением функции, если используешь асинхронные обработчики.
 
 ## Логирование Ошибок
 
