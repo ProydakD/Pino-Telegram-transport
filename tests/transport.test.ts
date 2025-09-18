@@ -82,6 +82,25 @@ describe('pino-telegram transport', () => {
     expect(payload.text).toContain('userId');
   });
 
+  it('gracefully disables transport when botToken missing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stream = telegramTransport({ chatId: 111 } as unknown as TelegramTransportOptions);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'noop' })}
+`);
+    stream.end();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('transport disabled'));
+    warn.mockRestore();
+  });
+
+  it('gracefully disables transport when chat is missing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stream = telegramTransport({ botToken: TOKEN } as unknown as TelegramTransportOptions);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'noop' })}
+`);
+    stream.end();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('transport disabled'));
+    warn.mockRestore();
+  });
   it('includes extras block when additional fields present', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport({}, recorder);

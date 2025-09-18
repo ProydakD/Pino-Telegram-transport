@@ -21,11 +21,24 @@ export { TelegramDeliveryError } from './telegram-client';
 
 /**
  * Создаёт потоковый транспорт для Pino, пересылающий сообщения в Telegram Bot API.
- *
- * @param options Опции, определяющие способ отправки и форматирования сообщений.
+ * Если обязательные параметры не указаны, возвращает no-op поток и выводит предупреждение.
  */
 export default function telegramTransport(options: TelegramTransportOptions) {
-  const normalized = normalizeOptions(options);
+  let normalized: ReturnType<typeof normalizeOptions>;
+
+  try {
+    normalized = normalizeOptions(options);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('botToken') || error.message.includes('целевого чата'))
+    ) {
+      console.warn(`[pino-telegram] transport disabled: ${error.message}`);
+      return createNoopStream();
+    }
+    throw error;
+  }
+
   const client = new TelegramClient(normalized);
   const rateLimiter = new RateLimiter();
   const queue = new TaskQueue();
@@ -104,15 +117,21 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
 
     if (error instanceof TelegramDeliveryError) {
-      console.error(
-        '[pino-telegram-logger-transport] Ошибка доставки:',
-        error.message,
-        error.response,
-      );
+      console.error('[pino-telegram] Ошибка доставки:', error.message, error.response);
     } else {
-      console.error('[pino-telegram-logger-transport] Необработанная ошибка доставки:', error);
+      console.error('[pino-telegram] Необработанная ошибка доставки:', error);
     }
   }
+}
+
+/**
+ * Возвращает no-op поток, который просто проглатывает входящие данные.
+ */
+function createNoopStream() {
+  return build((source) => {
+    source.on('data', () => {});
+    source.on('unknown', () => {});
+  });
 }
 
 /**
@@ -127,7 +146,7 @@ function parseLog(chunk: unknown): PinoLog | null {
     try {
       return JSON.parse(chunk) as PinoLog;
     } catch (error) {
-      console.error('[pino-telegram-logger-transport] Невозможно распарсить строку лога', error);
+      console.error('[pino-telegram] Невозможно распарсить строку лога', error);
       return null;
     }
   }

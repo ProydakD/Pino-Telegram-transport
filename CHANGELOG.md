@@ -4,18 +4,16 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### [1.0.4](https://github.com/ProydakD/pino-telegram-transport/compare/v1.0.3...v1.0.4) (2025-09-18)
 
-
 ### Chores
 
-* **package:** имя пакета изменено на pino-telegram-logger-transport ([cd0f440](https://github.com/ProydakD/pino-telegram-transport/commit/cd0f4404a19b0c342ed9b9ecbb09bc9bf5df08b2))
+- **package:** имя пакета изменено на pino-telegram-logger-transport ([cd0f440](https://github.com/ProydakD/pino-telegram-transport/commit/cd0f4404a19b0c342ed9b9ecbb09bc9bf5df08b2))
 
 ### [1.0.3](https://github.com/ProydakD/pino-telegram-transport/compare/v1.0.2...v1.0.3) (2025-09-18)
 
-
 ### Chores
 
-* **gitignore:** добавлено исключение для CHANGELOG.md ([b2f25ef](https://github.com/ProydakD/pino-telegram-transport/commit/b2f25efe3016e9575c9b8832bcf67e9558b58869))
-* **package:** переименован пакет в pino-telegram-logger-transport и обновлены ссылки ([a23b461](https://github.com/ProydakD/pino-telegram-transport/commit/a23b461d22f8ba7323cbbf2f4bcb984b17068077))
+- **gitignore:** добавлено исключение для CHANGELOG.md ([b2f25ef](https://github.com/ProydakD/pino-telegram-transport/commit/b2f25efe3016e9575c9b8832bcf67e9558b58869))
+- **package:** переименован пакет в pino-telegram-logger-transport и обновлены ссылки ([a23b461](https://github.com/ProydakD/pino-telegram-transport/commit/a23b461d22f8ba7323cbbf2f4bcb984b17068077))
 
 ### 1.0.2 (2025-09-18)
 
