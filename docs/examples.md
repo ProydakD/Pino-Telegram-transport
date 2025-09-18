@@ -1,64 +1,128 @@
-﻿# Примеры и сценарии
+﻿# Примеры
 
-Каталог `examples/` содержит готовые сценарии, которые можно запускать через `ts-node`.
+## Базовый Поток с несколькими чатами
 
-## Подготовка
+```ts
+import pino from 'pino';
 
-```bash
-npm install
-npm run build
-export TELEGRAM_BOT_TOKEN=123:ABC
-export TELEGRAM_CHAT_ID=-1001234567890
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken: process.env.TELEGRAM_BOT_TOKEN!,
+      chatId: [process.env.TELEGRAM_CHAT_ID!, { chatId: -1001234567890, threadId: 77 }],
+      minDelayBetweenMessages: 150,
+    },
+  },
+});
+
+logger.info({ context: { input: 'demo' } }, 'Transport is ready');
 ```
 
-## basic.ts — базовый запуск
+## Кастомные Заголовки и Extras
 
-- Отправка в личный чат и тему супергруппы.
-- Примеры сообщений разных уровней (`info`, `debug`, `error`).
-- Показывает использование контекста и rate limit.
+```ts
+import pino from 'pino';
 
-Запуск:
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      headings: {
+        time: 'Время',
+        context: 'Контекст',
+        error: 'Ошибка',
+        extras: 'Подробности',
+      },
+      includeExtras: true,
+      extraKeys: ['requestId', 'release'],
+    },
+  },
+});
 
-```bash
-npx ts-node examples/basic.ts
+logger.warn({ requestId: 'req-1', release: '1.2.0' }, 'Slow response');
 ```
 
-## custom-formatter.ts — MarkdownV2
+## Отправка Медиа по умолчанию
 
-- Прямое создание транспорта (без воркера) для кастомного `formatMessage`.
-- Пример экранирования MarkdownV2.
-- Демонстрирует работу `includeContext` и пользовательских заголовков.
+```ts
+import telegramTransport from 'pino-telegram-logger-transport';
 
-```bash
-npx ts-node examples/custom-formatter.ts
+const stream = telegramTransport({
+    botToken: process.env.TELEGRAM_BOT_TOKEN;,
+    chatId: process.env.TELEGRAM_CHAT_ID,
+    includeContext: true,
+});
+
+const logger = pino({}, stream);
+
+logger.warn(
+    {
+        messageType: 'photo',
+        mediaUrl: 'https://picsum.photos/seed/pino/600/400',
+        caption: 'Снимок инцидента',
+    }
+);
 ```
 
-## retry.ts — экспоненциальные повторы
+## Использование createMediaFormatter с кастомными ключами
 
-- Демонстрирует опции retryAttempts, retryInitialDelay, retryBackoffFactor и retryMaxDelay.
-- Логирует ошибки доставки через onDeliveryError.
-- Полезен для проверки поведения при 429/5xx и нестабильной сети.
+```ts
+import { Buffer } from 'node:buffer';
+import telegramTransport, { createMediaFormatter } from 'pino-telegram-logger-transport';
 
-```bash
-npx ts-node examples/retry.ts
+const mediaFormatter = createMediaFormatter({
+    typeKey: 'kind',
+    bufferKey: 'attachmentBuffer',
+    filenameKey: 'attachmentName',
+    contentTypeKey: 'attachmentType',
+    captionKey: 'note',
+    captionMaxLength: 32,
+});
+
+const stream = telegramTransport({
+    botToken: process.env.TELEGRAM_BOT_TOKEN;,
+    chatId: process.env.TELEGRAM_CHAT_ID,
+    formatMessage: mediaFormatter,
+});
+
+const logger = pino({}, stream);
+
+logger.info(
+    {
+        kind: 'photo',
+        attachmentBuffer: Buffer.from('sample image data'),
+        attachmentName: 'diagram.png',
+        attachmentType: 'image/png',
+        note: 'Диаграмма состояния сервиса',
+    },
+    'Диаграмма состояния сервиса',
+);
 ```
 
-## custom-send.ts — кастомный отправитель
+## Сценарий с повторами
 
-- Использует опцию `send` для подмены HTTP-запросов.
-- Удобно для тестов, интеграции с очередями, прокси.
-- Выводит payload в консоль и демонстрирует обработку ошибок через `onDeliveryError`.
+```ts
+import pino from 'pino';
 
-```bash
-npx ts-node examples/custom-send.ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      retryAttempts: 5,
+      retryInitialDelay: 1000,
+      retryBackoffFactor: 1.5,
+      retryMaxDelay: 15000,
+      onDeliveryError: (error, payload, method) => {
+        console.error('Не удалось доставить', method, payload, error);
+      },
+    },
+  },
+});
 ```
 
-## Переиспользование шаблонов
-
-- Копируйте пример и модифицируйте блок `options` под нужный сценарий.
-- Если необходимо работать с воркером, избегайте функций в опциях (`send`, `formatMessage`).
-- Для TypeScript-проектов можно импортировать типы `FormatMessageInput`, `FormatMessageResult`, `TelegramMessagePayload`.
-
-## Работа без реального Telegram
-
-Используйте `custom-send.ts` как основу для гибких тестов: подмените `send` и `onDeliveryError`, чтобы писать логи в файл или мок-сервис. Это особенно полезно в CI.
+Настройте `retryAttempts` и задержки под свои лимиты, а `onDeliveryError` используйте для метрик или алертов.

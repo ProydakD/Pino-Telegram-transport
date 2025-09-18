@@ -1,21 +1,30 @@
 ﻿# Pino Telegram transport
 
-Транспорт для [Pino](https://github.com/pinojs/pino), отправляющий логи в Telegram Bot API. Поддерживает личные чаты, группы и темы в супергруппах, а также выводит пользовательский контекст в сообщении.
+Транспорт для [Pino](https://github.com/pinojs/pino), пересылающий структурированные логи в Telegram Bot API. Поддерживаются личные чаты, супергруппы, темы и медиа-вложения.
+
+## Основные Возможности
+
+- Отправка сообщения в несколько чатов и темы с сохранением порядка.
+- Управление задержками между отправками, чтобы укладываться в лимиты Telegram.
+- Форматирование отправляемых сообщений.
+- Отпарвка текта, фото или документов.
+- Настройка повторных попыток с экспоненциальным `backoff` и обработкой `retry_after`.
+- Переоперделение метода отправки пользовательской функцией send для тестов или собственных клиентов.
 
 ## Требования
 
 - Node.js 18+
-- Активированный Telegram-бот с правами на запись в указанные чаты
+- Telegram-бот с правами записи в целевые чаты
 
 ## Установка
 
-```bash
-npm install pino-telegram-logger-transport
+```Bash
+  npm install pino-telegram-logger-transport
 ```
 
-## Быстрый старт
+## Быстрый Старт
 
-```typescript
+```Typescript
 import pino from 'pino';
 
 const logger = pino({
@@ -23,7 +32,8 @@ const logger = pino({
     target: 'pino-telegram-logger-transport',
     options: {
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
-      chatId: [process.env.TELEGRAM_CHAT_ID!, { chatId: -1001234567890, threadId: 42 }],
+      chatId: process.env.TELEGRAM_CHAT_ID,
+      threadId?: process.env.TELEGRAM_THREAD_ID
       minDelayBetweenMessages: 200,
       retryAttempts: 3,
     },
@@ -33,31 +43,51 @@ const logger = pino({
 logger.info({ context: { requestId: '42' } }, 'Привет, Telegram!');
 ```
 
-## Поведение по умолчанию
+## Поведение по Умолчанию
 
-Транспорт формирует текст вида:
+Транспорт формирует HTML-сообщение вида:
 
-```
+```Html
 ℹ️ INFO — <b>Message</b>
 <b>Time:</b> 2025-09-17T16:35:00.000Z
 <b>Context:</b>
 <pre>{"requestId":"42"}</pre>
 ```
 
-При наличии `err` в логе добавляется блок **Error** с полями `message` и `stack`. Дополнительные свойства записи (кроме `level`, `time`, `msg`, `context`, `err`) попадают в секцию **Extras**.
+При наличии err добавляется блок **Error** с полями `message` и `stack`. Дополнительные свойства записи (кроме `level`, `time`, `msg`, `context`, `err`) попадают в секцию **Extras**.
 
-## Повторы отправки
+## Повторы Отправки
 
-- При ответах Telegram `429` и `>=500` сообщение отправляется повторно.
-- Пауза между попытками управляется опциями `retryAttempts`, `retryInitialDelay`, `retryBackoffFactor`, `retryMaxDelay`.
-- Если Bot API возвращает `retry_after`, транспорт использует его как минимальную задержку.
-- Чтобы отключить повторные попытки, задайте `retryAttempts: 1`.
+- Повторяй доставку при ответах 429 и 5xx.
+- Настраивай задержки опциями
+  `etryAttempts`,
+  `etryInitialDelay`,
+  `etryBackoffFactor`,
+  `etryMaxDelay`.
+- Учитывай
+  `etry_after`, если Telegram вернул рекомендацию по ожиданию.
+- Отключай повторные попытки значением
+  `etryAttempts: 1`.
 
-## Кастомизация
+## Работа с Медиa
 
-### Заголовки
+```Typescript
+logger.warn(
+  {
+    messageType: 'photo',
+    mediaUrl: 'https://example.com/path/to/photo',
+    caption: 'Снимок инцидента',
+  }
+);
+```
 
-```ts
+По умолчанию форматтер ищет в логе поля messageType `(ext/photo/document)`, `mediaUrl`, `mediaBuffer`, `mediaFilename`, `mediaContentType` и `caption`.
+Для двоичных вложений принимает `Buffer`, `Uint8Array`, `ArrayBuffer` или объекты `{ type: 'Buffer', data: number[] }`.
+Telegram ограничивает подпись медиа 1024 символами — следи за длиной caption.
+
+## Кастомизация Заголовки
+
+```Typescript
 pino({
   transport: {
     target: 'pino-telegram-logger-transport',
@@ -70,46 +100,29 @@ pino({
         error: 'Ошибка',
         extras: 'Дополнительно',
       },
-    },
-  },
-});
-```
-
-Пара ключей можно задавать выборочно — остальные останутся английскими по умолчанию.
-
-### Секция Extras
-
-По умолчанию Extras содержит все поля лог-записи, кроме зарезервированных (`level`, `time`, `msg`, `context`, `err`).\nИспользуйте опции `includeExtras` и `extraKeys`, чтобы отключить блок или ограничить набор полей.
-
-```ts
-pino({
-  transport: {
-    target: 'pino-telegram-logger-transport',
-    options: {
-      botToken,
-      chatId,
       includeExtras: false,
-    },
-  },
-});
-
-// или ограниченный набор полей
-pino({
-  transport: {
-    target: 'pino-telegram-logger-transport',
-    options: {
-      botToken,
-      chatId,
       extraKeys: ['requestId', 'userId'],
     },
   },
 });
 ```
 
+Комбинируй `headings`, `includeExtras`, `extraKeys`, `contextKeys` и `maxMessageLength`, чтобы адаптировать внешний вид сообщений.
+
+## Пользовательский метод отпарвки `send`
+
+```Typescript
+async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod) {
+  console.log('Method:', method);
+  console.log('Payload:', JSON.stringify(payload, null, 2));
+}
+```
+
+Опция `send` получает полезную нагрузку и выбранный метод. Старые обработчики, ожидающие один аргумент, остаются рабочими: второй параметр будет игнорирован.
+
 ## Документация
 
-Расширенные материалы находятся в каталоге `docs/`:
-
+- [Установка](docs/install.md)
 - [Использование](docs/usage.md)
 - [Конфигурация](docs/configuration.md)
 - [Примеры](docs/examples.md)

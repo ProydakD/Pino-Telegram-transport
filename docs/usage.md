@@ -1,8 +1,7 @@
-﻿# Использование транспорта
+﻿# Использование Транспорта
 
-## Базовая интеграция с Pino
-
-> ⚠️ Если планируете добавлять функции в опции (например, `onDeliveryError`), отключите воркер (`worker: { enabled: false }`), чтобы избежать `DataCloneError`. Альтернатива — создать транспорт напрямую: `const stream = telegramTransport(options); const logger = pino({}, stream);`
+## Базовая Интеграция С Pino
+> ℹ️ Если планируете передавать функции в опции (например, `onDeliveryError`), отключите воркер (`worker: { enabled: false }`), чтобы избежать `DataCloneError`. Альтернатива — создать транспорт напрямую: `const stream = telegramTransport(options); const logger = pino({}, stream);`
 
 ```ts
 import pino from 'pino';
@@ -21,8 +20,7 @@ const logger = pino({
 logger.info({ context: { requestId: '42' } }, 'Hello, Telegram!');
 ```
 
-## Отправка в темы супергруппы
-
+## Отправка В Несколько Чатов
 ```ts
 const logger = pino({
   transport: {
@@ -41,8 +39,7 @@ const logger = pino({
 });
 ```
 
-## Прямое создание транспорта (без воркера)
-
+## Прямое Создание Транспорта
 ```ts
 import pino from 'pino';
 import telegramTransport from 'pino-telegram-logger-transport';
@@ -50,18 +47,16 @@ import telegramTransport from 'pino-telegram-logger-transport';
 const stream = telegramTransport({
   botToken,
   chatId,
-  formatMessage: customFormatter,
+  formatMessage?: customFormatter,
 });
 
 const logger = pino({}, stream);
 ```
+Используйте прямое создание, если требуется передать функции `formatMessage` или `send` без отключения воркера.
 
-Используйте этот подход, если нужно передать функции (`formatMessage`, `send`) и вы не хотите отключать воркер.
+> ℹ️ Если `botToken` или `chatId` не указаны, транспорт отключается и выводит предупреждение, не прерывая процесс.
 
-> ⚠️ Если `botToken` или `chatId` не указаны, транспорт автоматически отключается и выводит предупреждение, не прерывая процесс.
-
-## Отключение воркера (Pino >= 7)
-
+## Отключение Воркера (Pino ≥ 7)
 ```ts
 const logger = pino({
   transport: {
@@ -73,21 +68,17 @@ const logger = pino({
   },
 });
 ```
+Не все версии Node поддерживают отключение воркера без дополнительных флагов — проверяйте окружение.
 
-> Не все версии Node поддерживают отключение воркера без дополнительных флагов. Проверяйте окружение.
-
-## Передача пользовательского контекста
-
+## Передача Пользовательского Контекста
 ```ts
 logger.info({ context: { userId: 42, requestId: 'req-1' } }, 'Handled request');
 ```
+- Включайте блок `Context` опцией `includeContext` (по умолчанию `true`).
+- Настраивайте ключи через `contextKeys: ['ctx', 'metadata']`.
+- Отключайте блок `includeContext: false`.
 
-- Контекст выводится блоком `Context`.
-- Измените ключи: `contextKeys: ['ctx', 'metadata']`.
-- Отключите блок: `includeContext: false`.
-
-## Управление блоком Extras
-
+## Управление Extras
 ```ts
 const logger = pino({
   transport: {
@@ -100,15 +91,12 @@ const logger = pino({
   },
 });
 ```
-
-ИЛИ ограничить набор полей:
-
+Или ограничьте набор полей:
 ```ts
-extraKeys: ['requestId', 'origin'],
+extraKeys: ['requestId', 'origin'];
 ```
 
-## Повторы отправки
-
+## Повторы Отправки
 ```ts
 const logger = pino({
   transport: {
@@ -124,42 +112,58 @@ const logger = pino({
   },
 });
 ```
+См. `examples/retry.ts` для сценария с явным транспортом.
 
-См. examples/retry.ts для полноценного примера с явным транспортом.
+## Настройка Доставок
+- Установите `disableNotification: true`, чтобы отправлять тихие сообщения.
+- Установите `disableWebPagePreview: true`, если нужно показывать предпросмотр ссылок.
+- Увеличьте `minDelayBetweenMessages`, чтобы распределить трафик по чатам.
 
-## Настройка доставок
-
-- `disableNotification: true` — тихие сообщения.
-- `disableWebPagePreview: false` — разрешить предпросмотр ссылок.
-- `minDelayBetweenMessages` — увеличьте при работе с несколькими чатами, чтобы не упереться в rate limit.
-
-## Пользовательский форматтер
-
+## Пользовательский Форматтер
 ```ts
 function customFormatter({ log }: FormatMessageInput): FormatMessageResult {
   return {
     text: `Level=${log.level}\nMessage=${log.msg}`,
+    method: 'sendMessage',
   };
 }
 ```
+Возвращайте `text`, опциональный `method` и `extra`. Для медиа указывайте `photo` или `document` в `extra`.
 
-Возвращайте `text` и опциональный `extra` (объединится с payload `sendMessage`).
-
-## Пользовательский отправитель
-
+## Отправка Медиа
 ```ts
-async function sendToQueue(payload: TelegramMessagePayload) {
-  await queue.push(payload);
+logger.warn(
+    {
+        messageType: 'photo',
+        mediaUrl: 'https://picsum.photos/seed/pino/600/400',
+        caption: 'Снимок инцидента',
+    },
+    'Снимок инцидента',
+);
+
+logger.error(
+    {
+        messageType: 'document',
+        mediaUrl: 'https://picsum.photos/seed/pino/600/400',
+        caption: 'Подробный отчёт об ошибке',
+    },
+    'Подробный отчёт об ошибке',
+);
+```
+Telegram ограничивает подпись медиа 1024 символами — учитывайте это при формировании `text` или `caption`. 
+Для `Buffer` используйте объекты `{ type: 'Buffer', data: number[] }`, которые Pino создаёт при сериализации. См. `examples/media.ts` для рабочей схемы.
+
+## Пользовательский метод отпарвки `send`
+```ts
+async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod) {
+  await queue.push({ method, payload });
 }
 ```
+Опция `send` позволяет интегрировать собственную очередь или HTTP-клиент. Функции с одним аргументом остаются совместимыми — второй параметр будет отброшен.
 
-Полезно для тестов, прокси и интеграции с другими сервисами. См. [примеры](examples.md).
+## Логирование Ошибок
+- Без `onDeliveryError` транспорт пишет ошибки в `stderr`.
+- Добавьте обработчик `(error, payload?, method?)`, чтобы переслать сбои в мониторинг или предпринять откат.
 
-## Логирование ошибок
-
-- Без `onDeliveryError` транспорт пишет ошибки в stderr.
-- Добавьте обработчик, чтобы пересылать ошибки в мониторинг или принимать решения об откате.
-
-## Завершение работы
-
-Вызывайте `await logger.flush?.()` или задержку перед остановкой процесса, чтобы гарантировать отправку последних сообщений.
+## Завершение Работы
+Вызовите `await logger.flush?.()` или добавьте задержку перед остановкой процесса, чтобы дождаться доставки последних сообщений.
