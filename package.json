@@ -1,7 +1,7 @@
 {
   "name": "pino-telegram-logger-transport",
   "version": "1.4.0",
-  "description": "Pino transport для отправки логов в Telegram Bot API",
+  "description": "Транспорт Pino для отправки логов в Telegram Bot API с поддержкой медиа и адаптерами NestJS, Fastify и AWS Lambda",
   "main": "dist/index.js",
   "scripts": {
     "test": "vitest run",
@@ -15,9 +15,12 @@
     "postrelease": "git push --follow-tags"
   },
   "keywords": [
+    "aws-lambda",
+    "fastify",
+    "logging",
+    "nestjs",
     "pino",
     "telegram",
-    "logging",
     "transport"
   ],
   "author": "Dmitriy Proydak <proydak@gmail.com>",
