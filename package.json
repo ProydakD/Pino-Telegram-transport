@@ -1,7 +1,7 @@
 {
   "name": "pino-telegram-logger-transport",
   "version": "1.4.3",
-  "description": "Транспорт Pino для отправки логов в Telegram Bot API с поддержкой медиа и адаптерами NestJS, Fastify и AWS Lambda",
+  "description": "A transport for Pino that forwards structured logs to the Telegram Bot API, supports media attachments, and ships ready-made adapters for NestJS, Fastify, and AWS Lambda",
   "main": "dist/index.js",
   "scripts": {
     "test": "vitest run",
