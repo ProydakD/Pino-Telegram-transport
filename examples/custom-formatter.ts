@@ -1,5 +1,8 @@
 import pino from 'pino';
-import telegramTransport, { FormatMessageInput, FormatMessageResult } from 'pino-telegram-transport';
+import telegramTransport, {
+  FormatMessageInput,
+  FormatMessageResult,
+} from 'pino-telegram-transport';
 
 function formatAsMarkdownV2({ log }: FormatMessageInput): FormatMessageResult {
   const timestamp = new Date(log.time ?? Date.now()).toISOString();
