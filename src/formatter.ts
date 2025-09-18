@@ -15,7 +15,7 @@ const LEVEL_ICONS: Record<string, string> = {
   DEBUG: '🐛',
   INFO: 'ℹ️',
   WARN: '⚠️',
-  ERROR: '❌',
+  ERROR: '❗',
   FATAL: '💀',
 };
 
