@@ -1,6 +1,8 @@
 ﻿# Использование Транспорта
 
-## Базовая Интеграция С Pino
+Русская версия · [English version](usage.en.md)
+
+## Базовая интеграция с Pino
 
 > ℹ️ Если планируете передавать функции в опции (например, `onDeliveryError`), отключите воркер (`worker: { enabled: false }`), чтобы избежать `DataCloneError`. Альтернатива — создать транспорт напрямую: `const stream = telegramTransport(options); const logger = pino({}, stream);`
 
@@ -21,7 +23,7 @@ const logger = pino({
 logger.info({ context: { requestId: '42' } }, 'Hello, Telegram!');
 ```
 
-## Отправка В Несколько Чатов
+## Отправка в несколько чатов
 
 ```ts
 const logger = pino({
@@ -41,7 +43,7 @@ const logger = pino({
 });
 ```
 
-## Прямое Создание Транспорта
+## Прямое создание транспорта
 
 ```ts
 import pino from 'pino';
@@ -50,17 +52,17 @@ import telegramTransport from 'pino-telegram-logger-transport';
 const stream = telegramTransport({
   botToken,
   chatId,
-  formatMessage?: customFormatter,
+  formatMessage: customFormatter,
 });
 
 const logger = pino({}, stream);
 ```
 
-Используйте прямое создание, если требуется передать функции `formatMessage` или `send` без отключения воркера.
+Используйте прямое создание, если нужно передать функции `formatMessage` или `send` без отключения воркера.
 
 > ℹ️ Если `botToken` или `chatId` не указаны, транспорт отключается и выводит предупреждение, не прерывая процесс.
 
-## Отключение Воркера (Pino ≥ 7)
+## Отключение воркера (Pino ≥ 7)
 
 ```ts
 const logger = pino({
@@ -76,7 +78,7 @@ const logger = pino({
 
 Не все версии Node поддерживают отключение воркера без дополнительных флагов — проверяйте окружение.
 
-## Передача Пользовательского Контекста
+## Пользовательский контекст
 
 ```ts
 logger.info({ context: { userId: 42, requestId: 'req-1' } }, 'Handled request');
@@ -107,7 +109,7 @@ const logger = pino({
 extraKeys: ['requestId', 'origin'];
 ```
 
-## Повторы Отправки
+## Повторы отправки
 
 ```ts
 const logger = pino({
@@ -127,13 +129,7 @@ const logger = pino({
 
 См. `examples/retry.ts` для сценария с явным транспортом.
 
-## Настройка Доставок
-
-- Установите `disableNotification: true`, чтобы отправлять тихие сообщения.
-- Установите `disableWebPagePreview: true`, если нужно показывать предпросмотр ссылок.
-- Увеличьте `minDelayBetweenMessages`, чтобы распределить трафик по чатам.
-
-## Пользовательский Форматтер
+## Пользовательский форматтер
 
 ```ts
 function customFormatter({ log }: FormatMessageInput): FormatMessageResult {
@@ -146,7 +142,7 @@ function customFormatter({ log }: FormatMessageInput): FormatMessageResult {
 
 Возвращайте `text`, опциональный `method` и `extra`. Для медиа указывайте `photo` или `document` в `extra`.
 
-## Отправка Медиа
+## Отправка медиа
 
 ```ts
 logger.warn(
@@ -181,7 +177,7 @@ async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod)
 
 Опция `send` позволяет интегрировать собственную очередь или HTTP-клиент. Функции с одним аргументом остаются совместимыми — второй параметр будет отброшен.
 
-## Интеграция С Фреймворками
+## Интеграция с фреймворками
 
 ### NestJS (nestjs-pino)
 
@@ -210,8 +206,8 @@ import { createNestLoggerOptions } from 'pino-telegram-logger-transport';
 export class AppModule {}
 ```
 
-- Передавай дополнительные опции `LoggerModule` вторым аргументом.
-- Отключай буферизацию HTTP-запросов в `pinoHttp`, если она включена.
+- Передавайте дополнительные опции `LoggerModule` вторым аргументом.
+- Отключайте буферизацию HTTP-запросов в `pinoHttp`, если она включена.
 
 ### Fastify
 
@@ -230,8 +226,8 @@ const app = fastify({
 });
 ```
 
-- Передавай `baseOptions` для настройки уровня и форматтеров Fastify.
-- Отключай встроенный транспорт Fastify, если передавал его ранее, чтобы не дублировать доставку.
+- Передавайте `baseOptions` для настройки уровня и форматтеров Fastify.
+- Отключайте встроенный транспорт Fastify, если передавали его ранее, чтобы не дублировать доставку.
 
 ### AWS Lambda
 
@@ -255,14 +251,14 @@ export const handler = async (event: unknown) => {
 };
 ```
 
-- Используй вторым аргументом любые опции `pino`, например `messageKey` или `base`.
-- Добавь `await logger.flush?.()` перед завершением функции, если используешь асинхронные обработчики.
+- Используйте вторым аргументом любые опции `pino`, например `messageKey` или `base`.
+- Добавьте `await logger.flush?.()` перед завершением функции, если используете асинхронные обработчики.
 
-## Логирование Ошибок
+## Логирование ошибок
 
 - Без `onDeliveryError` транспорт пишет ошибки в `stderr`.
 - Добавьте обработчик `(error, payload?, method?)`, чтобы переслать сбои в мониторинг или предпринять откат.
 
-## Завершение Работы
+## Завершение работы
 
 Вызовите `await logger.flush?.()` или добавьте задержку перед остановкой процесса, чтобы дождаться доставки последних сообщений.

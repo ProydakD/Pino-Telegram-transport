@@ -1,6 +1,8 @@
-﻿# Примеры
+﻿# Examples
 
-## Базовый Поток с несколькими чатами
+English version · [Русская версия](examples.ru.md)
+
+## Basic stream with multiple chats
 
 ```ts
 import pino from 'pino';
@@ -19,7 +21,7 @@ const logger = pino({
 logger.info({ context: { input: 'demo' } }, 'Transport is ready');
 ```
 
-## Кастомные Заголовки и Extras
+## Custom headings and Extras
 
 ```ts
 import pino from 'pino';
@@ -31,10 +33,10 @@ const logger = pino({
       botToken,
       chatId,
       headings: {
-        time: 'Время',
-        context: 'Контекст',
-        error: 'Ошибка',
-        extras: 'Подробности',
+        time: 'Time',
+        context: 'Context',
+        error: 'Error',
+        extras: 'Details',
       },
       includeExtras: true,
       extraKeys: ['requestId', 'release'],
@@ -45,64 +47,63 @@ const logger = pino({
 logger.warn({ requestId: 'req-1', release: '1.2.0' }, 'Slow response');
 ```
 
-## Отправка Медиа по умолчанию
+## Default media delivery
 
 ```ts
+import pino from 'pino';
 import telegramTransport from 'pino-telegram-logger-transport';
 
 const stream = telegramTransport({
-    botToken: process.env.TELEGRAM_BOT_TOKEN;,
-    chatId: process.env.TELEGRAM_CHAT_ID,
-    includeContext: true,
+  botToken: process.env.TELEGRAM_BOT_TOKEN!,
+  chatId: process.env.TELEGRAM_CHAT_ID!,
+  includeContext: true,
 });
 
 const logger = pino({}, stream);
 
-logger.warn(
-    {
-        messageType: 'photo',
-        mediaUrl: 'https://picsum.photos/seed/pino/600/400',
-        caption: 'Снимок инцидента',
-    }
-);
+logger.warn({
+  messageType: 'photo',
+  mediaUrl: 'https://picsum.photos/seed/pino/600/400',
+  caption: 'Incident snapshot',
+});
 ```
 
-## Использование createMediaFormatter с кастомными ключами
+## createMediaFormatter with custom keys
 
 ```ts
 import { Buffer } from 'node:buffer';
 import telegramTransport, { createMediaFormatter } from 'pino-telegram-logger-transport';
 
 const mediaFormatter = createMediaFormatter({
-    typeKey: 'kind',
-    bufferKey: 'attachmentBuffer',
-    filenameKey: 'attachmentName',
-    contentTypeKey: 'attachmentType',
-    captionKey: 'note',
-    captionMaxLength: 32,
+  typeKey: 'kind',
+  bufferKey: 'attachmentBuffer',
+  filenameKey: 'attachmentName',
+  contentTypeKey: 'attachmentType',
+  captionKey: 'note',
+  captionMaxLength: 32,
 });
 
 const stream = telegramTransport({
-    botToken: process.env.TELEGRAM_BOT_TOKEN;,
-    chatId: process.env.TELEGRAM_CHAT_ID,
-    formatMessage: mediaFormatter,
+  botToken: process.env.TELEGRAM_BOT_TOKEN!,
+  chatId: process.env.TELEGRAM_CHAT_ID!,
+  formatMessage: mediaFormatter,
 });
 
 const logger = pino({}, stream);
 
 logger.info(
-    {
-        kind: 'photo',
-        attachmentBuffer: Buffer.from('sample image data'),
-        attachmentName: 'diagram.png',
-        attachmentType: 'image/png',
-        note: 'Диаграмма состояния сервиса',
-    },
-    'Диаграмма состояния сервиса',
+  {
+    kind: 'photo',
+    attachmentBuffer: Buffer.from('sample image data'),
+    attachmentName: 'diagram.png',
+    attachmentType: 'image/png',
+    note: 'Service state diagram',
+  },
+  'Service state diagram',
 );
 ```
 
-## Сценарий с повторами
+## Retry scenario
 
 ```ts
 import pino from 'pino';
@@ -118,16 +119,16 @@ const logger = pino({
       retryBackoffFactor: 1.5,
       retryMaxDelay: 15000,
       onDeliveryError: (error, payload, method) => {
-        console.error('Не удалось доставить', method, payload, error);
+        console.error('Delivery failed', method, payload, error);
       },
     },
   },
 });
 ```
 
-Настройте `retryAttempts` и задержки под свои лимиты, а `onDeliveryError` используйте для метрик или алертов.
+Adjust `retryAttempts` and delays to match your limits, and use `onDeliveryError` to feed metrics or alerts.
 
-## Интеграция С Фреймворками
+## Framework integrations
 
 ### NestJS
 
@@ -177,6 +178,6 @@ const logger = pino(
 );
 
 export const handler = async (event: unknown) => {
-  logger.info({ event }, 'Lambda вызвана');
+  logger.info({ event }, 'Lambda invoked');
 };
 ```

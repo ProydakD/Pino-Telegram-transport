@@ -35,7 +35,7 @@ logs/
 
 # Technical
 *.md
-!README.md
+!README*.md
 !/docs/*.md
 !CHANGELOG.md
 .versionrc.json
