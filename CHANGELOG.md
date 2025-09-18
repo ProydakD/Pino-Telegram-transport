@@ -1,13 +1,21 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-## [1.2.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.1.0...v1.2.0) (2025-09-18)
-
+## [Unreleased]
 
 ### Features
 
-* **transport:** добавлена поддержка повторных попыток отправки с экспоненциальным бэкоффом и иконки уровней логирования ([33a626d](https://github.com/ProydakD/pino-telegram-transport/commit/33a626da252c28d1114bb2eee54704d431fb2056))
+- **transport:** добавлена отправка через `sendPhoto`/`sendDocument` и общий интерфейс `TelegramRequest`.
+- **types:** обновлены сигнатуры `send` и `onDeliveryError`, экспортированы вспомогательные типы для медиа.
+
+### Features\n\n- **presets:** добавлен helper createMediaFormatter для автоматического выбора sendPhoto/sendDocument.\n\n### Docs\n\n- описаны новые сценарии и обновлён пример отправки медиа в README, usage и examples.\n
+
+## [1.2.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.1.0...v1.2.0) (2025-09-18)
+
+### Features
+
+- **transport:** добавлена поддержка повторных попыток отправки с экспоненциальным бэкоффом и иконки уровней логирования ([33a626d](https://github.com/ProydakD/pino-telegram-transport/commit/33a626da252c28d1114bb2eee54704d431fb2056))
 
 ## [1.1.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.0.4...v1.1.0) (2025-09-18)
 
