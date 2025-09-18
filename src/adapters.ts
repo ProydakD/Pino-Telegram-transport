@@ -1,4 +1,4 @@
-﻿import type { LoggerOptions } from 'pino';
+import type { LoggerOptions } from 'pino';
 import type { TelegramTransportOptions } from './types';
 
 /**
@@ -22,7 +22,7 @@ export interface NestLoggerOptions {
   [key: string]: unknown;
 }
 
-export interface NestLoggerOverrides extends NestLoggerOptions {}
+export type NestLoggerOverrides = NestLoggerOptions;
 
 /**
  * Создаёт конфигурацию LoggerModule для nestjs-pino с подключённым Telegram-транспортом.
