@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.4.3](https://github.com/ProydakD/pino-telegram-transport/compare/v1.4.2...v1.4.3) (2025-09-18)
+
+
+### Documentation
+
+* **readme:** документация разделена на русскую и английскую версии и обновлён корневой README ([1e18ebc](https://github.com/ProydakD/pino-telegram-transport/commit/1e18ebcda847b27c4372afd0dd5752a608e387c3))
+
 ### [1.4.2](https://github.com/ProydakD/pino-telegram-transport/compare/v1.4.1...v1.4.2) (2025-09-18)
 
 ### Documentation
