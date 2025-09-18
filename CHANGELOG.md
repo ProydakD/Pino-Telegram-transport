@@ -6,30 +6,26 @@ All notable changes to this project will be documented in this file. See [standa
 
 ## [1.3.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.2.0...v1.3.0) (2025-09-18)
 
-
 ### Features
 
-* **examples:** добавлен пример повторных попыток отправки сообщений в Telegram ([1717740](https://github.com/ProydakD/pino-telegram-transport/commit/1717740df49ae2b1a2c8ff88401188ad5a8fb0ea))
-* **telegram:** добавлена поддержка sendPhoto и sendDocument через TelegramRequest ([e152909](https://github.com/ProydakD/pino-telegram-transport/commit/e1529094e1db5c5ad2bd80170a5975e5a872c591))
-
+- **examples:** добавлен пример повторных попыток отправки сообщений в Telegram ([1717740](https://github.com/ProydakD/pino-telegram-transport/commit/1717740df49ae2b1a2c8ff88401188ad5a8fb0ea))
+- **telegram:** добавлена поддержка sendPhoto и sendDocument через TelegramRequest ([e152909](https://github.com/ProydakD/pino-telegram-transport/commit/e1529094e1db5c5ad2bd80170a5975e5a872c591))
 
 ### Bug Fixes
 
-* **formatter:** заменён значок ERROR на ❗ ([a6a5179](https://github.com/ProydakD/pino-telegram-transport/commit/a6a517951eae7975986578dd98fbaf0bf67f9c40))
-
+- **formatter:** заменён значок ERROR на ❗ ([a6a5179](https://github.com/ProydakD/pino-telegram-transport/commit/a6a517951eae7975986578dd98fbaf0bf67f9c40))
 
 ### Tests
 
-* **transport:** обновлены тесты Telegram-транспорта ([1b60998](https://github.com/ProydakD/pino-telegram-transport/commit/1b60998257c45c8bf5f93f9797f4444488459b3b))
-
+- **transport:** обновлены тесты Telegram-транспорта ([1b60998](https://github.com/ProydakD/pino-telegram-transport/commit/1b60998257c45c8bf5f93f9797f4444488459b3b))
 
 ### Documentation
 
-* **changelog:** добавлена секция "Unreleased" и описаны новые возможности и примеры отправки медиа ([80606dd](https://github.com/ProydakD/pino-telegram-transport/commit/80606ddaddd15cc2d831182592205dcbe19f821b))
-* **docs:** обновлена документация по установке, использованию и конфигурации ([ab8b1a1](https://github.com/ProydakD/pino-telegram-transport/commit/ab8b1a1d8e7799a03c7f0e51ece56e50a2736826))
-* **docs:** обновлена документация по установке, использованию и конфигурации ([514b0d2](https://github.com/ProydakD/pino-telegram-transport/commit/514b0d2db56241907ed154145d1f1b8aed4703f0))
-* **examples:** добавлен пример кастомных ключей для медиа ([dc52a37](https://github.com/ProydakD/pino-telegram-transport/commit/dc52a37e4669a80ee4a6e0809e378b33a9f65e4a))
-* **usage:** удалён обработчик onDeliveryError из примера кода ([310232b](https://github.com/ProydakD/pino-telegram-transport/commit/310232bcb7e95d92ded0b9c64774ed6b7b48e71e))
+- **changelog:** добавлена секция "Unreleased" и описаны новые возможности и примеры отправки медиа ([80606dd](https://github.com/ProydakD/pino-telegram-transport/commit/80606ddaddd15cc2d831182592205dcbe19f821b))
+- **docs:** обновлена документация по установке, использованию и конфигурации ([ab8b1a1](https://github.com/ProydakD/pino-telegram-transport/commit/ab8b1a1d8e7799a03c7f0e51ece56e50a2736826))
+- **docs:** обновлена документация по установке, использованию и конфигурации ([514b0d2](https://github.com/ProydakD/pino-telegram-transport/commit/514b0d2db56241907ed154145d1f1b8aed4703f0))
+- **examples:** добавлен пример кастомных ключей для медиа ([dc52a37](https://github.com/ProydakD/pino-telegram-transport/commit/dc52a37e4669a80ee4a6e0809e378b33a9f65e4a))
+- **usage:** удалён обработчик onDeliveryError из примера кода ([310232b](https://github.com/ProydakD/pino-telegram-transport/commit/310232bcb7e95d92ded0b9c64774ed6b7b48e71e))
 
 ## [1.2.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.1.0...v1.2.0) (2025-09-18)
 
