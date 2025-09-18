@@ -1,5 +1,5 @@
 {
-  "name": "pino-telegram--transport",
+  "name": "pino-telegram-logger-transport",
   "version": "1.0.3",
   "description": "Pino transport для отправки логов в Telegram Bot API",
   "main": "dist/index.js",
