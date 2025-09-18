@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.4](https://github.com/ProydakD/pino-telegram-transport/compare/v1.0.3...v1.0.4) (2025-09-18)
+
+
+### Chores
+
+* **package:** имя пакета изменено на pino-telegram-logger-transport ([cd0f440](https://github.com/ProydakD/pino-telegram-transport/commit/cd0f4404a19b0c342ed9b9ecbb09bc9bf5df08b2))
+
 ### [1.0.3](https://github.com/ProydakD/pino-telegram-transport/compare/v1.0.2...v1.0.3) (2025-09-18)
 
 
