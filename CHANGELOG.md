@@ -4,27 +4,23 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### [1.4.1](https://github.com/ProydakD/pino-telegram-transport/compare/v1.4.0...v1.4.1) (2025-09-18)
 
-
 ### Documentation
 
-* **package:** обновлено описание и добавлены новые ключевые слова ([c176297](https://github.com/ProydakD/pino-telegram-transport/commit/c176297ea24ba3b10f6fc295cf78ab3e5f148861))
+- **package:** обновлено описание и добавлены новые ключевые слова ([c176297](https://github.com/ProydakD/pino-telegram-transport/commit/c176297ea24ba3b10f6fc295cf78ab3e5f148861))
 
 ## [1.4.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.3.1...v1.4.0) (2025-09-18)
 
-
 ### Features
 
-* **adapters:** добавлены адаптеры логирования для NestJS, Fastify и Lambda ([7c35b09](https://github.com/ProydakD/pino-telegram-transport/commit/7c35b096387609561c092f4afc71603090481628))
-
+- **adapters:** добавлены адаптеры логирования для NestJS, Fastify и Lambda ([7c35b09](https://github.com/ProydakD/pino-telegram-transport/commit/7c35b096387609561c092f4afc71603090481628))
 
 ### Documentation
 
-* **frameworks:** добавлен раздел интеграции с NestJS, Fastify и AWS Lambda ([f18ecdd](https://github.com/ProydakD/pino-telegram-transport/commit/f18ecdd1b79aecee1b2fc31fbb82e66dfdfc535e))
-
+- **frameworks:** добавлен раздел интеграции с NestJS, Fastify и AWS Lambda ([f18ecdd](https://github.com/ProydakD/pino-telegram-transport/commit/f18ecdd1b79aecee1b2fc31fbb82e66dfdfc535e))
 
 ### Refactoring
 
-* **adapters:** NestLoggerOverrides заменён на псевдоним типа NestLoggerOptions ([20f9e5c](https://github.com/ProydakD/pino-telegram-transport/commit/20f9e5c9c6bfe8152e40c264ec41461bf44a7cc7))
+- **adapters:** NestLoggerOverrides заменён на псевдоним типа NestLoggerOptions ([20f9e5c](https://github.com/ProydakD/pino-telegram-transport/commit/20f9e5c9c6bfe8152e40c264ec41461bf44a7cc7))
 
 ### [1.3.1](https://github.com/ProydakD/pino-telegram-transport/compare/v1.3.0...v1.3.1) (2025-09-18)
 
