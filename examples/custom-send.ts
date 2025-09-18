@@ -1,6 +1,6 @@
 import pino from 'pino';
-import telegramTransport from 'pino-telegram-transport';
-import type { TelegramMessagePayload } from 'pino-telegram-transport';
+import telegramTransport from 'pino-telegram-logger-transport';
+import type { TelegramMessagePayload } from 'pino-telegram-logger-transport';
 
 async function customSend(payload: TelegramMessagePayload): Promise<void> {
   // Forward to any external system (file, queue, monitoring service, etc.).

@@ -15,7 +15,7 @@
     "types": ["node", "vitest"],
     "baseUrl": ".",
     "paths": {
-      "pino-telegram-transport": ["src/index"]
+      "pino-telegram-logger-transport": ["src/index"]
     }
   },
   "include": ["src"],

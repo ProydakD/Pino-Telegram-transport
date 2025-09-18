@@ -71,7 +71,7 @@ chatId: [
 
 - При использовании воркера Pino (значение по умолчанию) функции нельзя клонировать → получите `DataCloneError`.
 - Решения:
-  - Отключить воркер: `pino({ transport: { target: 'pino-telegram-transport', options, worker: { enabled: false } } })` (требует Node >= 18.12).
+  - Отключить воркер: `pino({ transport: { target: 'pino-telegram-logger-transport', options, worker: { enabled: false } } })` (требует Node >= 18.12).
   - Использовать прямое создание транспорта: `const stream = telegramTransport(options); pino({}, stream);` — см. примеры.
 
 ## Переменные окружения

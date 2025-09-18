@@ -7,7 +7,7 @@ import pino from 'pino';
 
 const logger = pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: {
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
       chatId: process.env.TELEGRAM_CHAT_ID!,
@@ -24,7 +24,7 @@ logger.info({ context: { requestId: '42' } }, 'Hello, Telegram!');
 ```ts
 const logger = pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: {
       botToken,
       chatId: [
@@ -43,7 +43,7 @@ const logger = pino({
 
 ```ts
 import pino from 'pino';
-import telegramTransport from 'pino-telegram-transport';
+import telegramTransport from 'pino-telegram-logger-transport';
 
 const stream = telegramTransport({
   botToken,
@@ -61,7 +61,7 @@ const logger = pino({}, stream);
 ```ts
 const logger = pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: { botToken, chatId, formatMessage: customFormatter },
     worker: {
       enabled: false,
@@ -87,7 +87,7 @@ logger.info({ context: { userId: 42, requestId: 'req-1' } }, 'Handled request');
 ```ts
 const logger = pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: {
       botToken,
       chatId,

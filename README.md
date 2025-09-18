@@ -10,7 +10,7 @@
 ## Установка
 
 ```bash
-npm install pino-telegram-transport
+npm install pino-telegram-logger-transport
 ```
 
 ## Быстрый старт
@@ -20,7 +20,7 @@ import pino from 'pino';
 
 const logger = pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: {
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
       chatId: [process.env.TELEGRAM_CHAT_ID!, { chatId: -1001234567890, threadId: 42 }],
@@ -52,7 +52,7 @@ logger.info({ context: { requestId: '42' } }, 'Привет, Telegram!');
 ```ts
 pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: {
       botToken,
       chatId,
@@ -76,7 +76,7 @@ pino({
 ```ts
 pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: {
       botToken,
       chatId,
@@ -88,7 +88,7 @@ pino({
 // или ограниченный набор полей
 pino({
   transport: {
-    target: 'pino-telegram-transport',
+    target: 'pino-telegram-logger-transport',
     options: {
       botToken,
       chatId,

@@ -1,4 +1,4 @@
-# Документация pino-telegram-transport
+# Документация pino-telegram-logger-transport
 
 Добро пожаловать! Здесь собраны материалы, которые помогут быстро познакомиться с транспортом, настроить его в проекте и поддерживать рабочий процесс.
 
@@ -8,7 +8,6 @@
 - [Использование](usage.md)
 - [Конфигурация](configuration.md)
 - [Примеры и сценарии](examples.md)
-- [Тестирование и качество](testing.md)
 - [FAQ и устранение неполадок](faq.md)
 
 ## Быстрый старт
@@ -23,7 +22,7 @@
 
    const logger = pino({
      transport: {
-       target: 'pino-telegram-transport',
+       target: 'pino-telegram-logger-transport',
        options: {
          botToken: process.env.TELEGRAM_BOT_TOKEN!,
          chatId: process.env.TELEGRAM_CHAT_ID!,

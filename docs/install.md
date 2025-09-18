@@ -30,10 +30,10 @@ export TELEGRAM_CHAT_ID=-1001234567890
 ## Локальное тестирование без публикации
 
 1. Выполните `npm run build`, чтобы получить артефакты в `dist/`.
-2. Используйте self-reference из `package.json` — имя пакета `pino-telegram-transport` уже доступно в текущем проекте.
+2. Используйте self-reference из `package.json` — имя пакета `pino-telegram-logger-transport` уже доступно в текущем проекте.
 3. Для внешнего проекта:
-   - `npm link` / `npm link pino-telegram-transport`.
-   - или `npm pack` и `npm install ../путь/pino-telegram-transport-*.tgz`.
+   - `npm link` / `npm link pino-telegram-logger-transport`.
+   - или `npm pack` и `npm install ../путь/pino-telegram-logger-transport-*.tgz`.
 
 ## Обновление зависимостей
 

@@ -104,9 +104,13 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
 
     if (error instanceof TelegramDeliveryError) {
-      console.error('[pino-telegram-transport] Ошибка доставки:', error.message, error.response);
+      console.error(
+        '[pino-telegram-logger-transport] Ошибка доставки:',
+        error.message,
+        error.response,
+      );
     } else {
-      console.error('[pino-telegram-transport] Необработанная ошибка доставки:', error);
+      console.error('[pino-telegram-logger-transport] Необработанная ошибка доставки:', error);
     }
   }
 }
@@ -123,7 +127,7 @@ function parseLog(chunk: unknown): PinoLog | null {
     try {
       return JSON.parse(chunk) as PinoLog;
     } catch (error) {
-      console.error('[pino-telegram-transport] Невозможно распарсить строку лога', error);
+      console.error('[pino-telegram-logger-transport] Невозможно распарсить строку лога', error);
       return null;
     }
   }

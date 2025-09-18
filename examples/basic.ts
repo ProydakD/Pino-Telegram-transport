@@ -20,7 +20,7 @@ async function main() {
 
   const logger = pino({
     transport: {
-      target: 'pino-telegram-transport',
+      target: 'pino-telegram-logger-transport',
       options: {
         botToken,
         chatId: targets,
