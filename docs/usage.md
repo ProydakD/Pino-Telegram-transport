@@ -120,9 +120,6 @@ const logger = pino({
       retryInitialDelay: 500,
       retryBackoffFactor: 2,
       retryMaxDelay: 5000,
-      onDeliveryError(error, payload) {
-        console.error('Failed to deliver log to Telegram', payload?.chat_id, error);
-      },
     },
   },
 });
