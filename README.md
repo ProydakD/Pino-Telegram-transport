@@ -1,4 +1,4 @@
-# pino-telegram-transport
+# Pino Telegram transport
 
 Транспорт для [Pino](https://github.com/pinojs/pino), отправляющий логи в Telegram Bot API. Поддерживает личные чаты, группы и темы в супергруппах, а также выводит пользовательский контекст в сообщении.
 

@@ -14,8 +14,13 @@
     "release": "standard-version",
     "postrelease": "git push --follow-tags"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "pino",
+    "telegram",
+    "logging",
+    "transport"
+  ],
+  "author": "Dmitriy Proydak <proydak@gmail.com>",
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
@@ -48,5 +53,13 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ProydakD/pino-telegram-transport.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ProydakD/pino-telegram-transport/issues"
+  },
+  "homepage": "https://github.com/ProydakD/pino-telegram-transport#readme"
 }
