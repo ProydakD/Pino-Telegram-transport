@@ -1,0 +1,40 @@
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Tests
+*.coverage
+
+# Misc
+.tmp/
+.*/
+
+# Technical
+*.md
+!README.md
+!/docs/*.md
+.versionrc.json
