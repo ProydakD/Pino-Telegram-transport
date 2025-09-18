@@ -34,6 +34,12 @@ export type {
 };
 export { TelegramDeliveryError } from './telegram-client';
 export { createMediaFormatter } from './presets';
+export {
+  createNestLoggerOptions,
+  createFastifyLoggerOptions,
+  createLambdaLoggerOptions,
+} from './adapters';
+export type { NestLoggerOptions, NestLoggerOverrides, FastifyLoggerOptions } from './adapters';
 
 /**
  * Создаёт потоковый транспорт для Pino, пересылающий сообщения в Telegram Bot API.
