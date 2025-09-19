@@ -11,3 +11,4 @@ Welcome! This guide collects everything you need to integrate the transport, tun
 - Dive into [configuration](configuration.en.md) for a full option reference.
 - Explore the [examples](examples.en.md) to adapt the transport to real-world scenarios.
 - Check the [FAQ](faq.en.md) if you run into common issues.
+- Use the [CLI](cli.en.md) to validate Telegram credentials and scaffold configs.

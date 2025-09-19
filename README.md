@@ -7,11 +7,11 @@ A transport for [Pino](https://github.com/pinojs/pino) that forwards structured 
 ## Key Features
 
 - Deliver messages to multiple chats and topics while keeping the original order.
-- Control delivery delays to stay within Telegram rate limits.
+- Stay within Telegram limits with configurable delays and retry policies.
 - Format outgoing messages with the built-in HTML formatter or a custom one.
 - Send text, photos, or documents with a single transport.
-- Configure retries with exponential backoff and `retry_after` handling.
 - Override the delivery method with a custom `send` function for tests or alternative clients.
+- Validate credentials and scaffold configs with the built-in CLI.
 
 ## Requirements
 
@@ -176,6 +176,7 @@ export const handler = async (event: unknown) => {
 - [Configuration](docs/configuration.en.md)
 - [Examples](docs/examples.en.md)
 - [FAQ](docs/faq.en.md)
+- [CLI reference](docs/cli.en.md)
 
 ## License
 

@@ -64,5 +64,8 @@
   "bugs": {
     "url": "https://github.com/ProydakD/pino-telegram-transport/issues"
   },
-  "homepage": "https://github.com/ProydakD/pino-telegram-transport#readme"
+  "homepage": "https://github.com/ProydakD/pino-telegram-transport#readme",
+  "bin": {
+    "pino-telegram-cli": "dist/cli.js"
+  }
 }
