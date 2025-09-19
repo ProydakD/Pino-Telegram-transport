@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.4.4...v1.5.0) (2025-09-19)
+
+
+### Features
+
+* **cli:** добавлена проверка темы форума через отправку и удаление беззвучного сообщения ([936724b](https://github.com/ProydakD/pino-telegram-transport/commit/936724b5097aa784a43d0a0843ce6b94ab3c521a))
+* **cli:** добавлена утилита CLI для проверки и генерации конфигурации ([cde8ce2](https://github.com/ProydakD/pino-telegram-transport/commit/cde8ce20439a1c973e12ef6b9757f768dff4b2ac))
+
+
+### Bug Fixes
+
+* **cli:** заменён метод editForumTopic на getForumTopic для получения информации о теме ([c027457](https://github.com/ProydakD/pino-telegram-transport/commit/c0274578a7712723b68036401bb31fae6f6a0cbc))
+
 ### [1.4.4](https://github.com/ProydakD/pino-telegram-transport/compare/v1.4.3...v1.4.4) (2025-09-18)
 
 ### Documentation
