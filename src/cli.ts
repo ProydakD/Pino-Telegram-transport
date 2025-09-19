@@ -271,7 +271,7 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
     const chatId = chats[0];
     context.stdout(`Проверка темы ${parsedThread.value} в чате ${chatId}…`);
     try {
-      const topic = await callTelegram<ForumTopicInfo>(token, 'editForumTopic', {
+      const topic = await callTelegram<ForumTopicInfo>(token, 'getForumTopic', {
         chat_id: chatId,
         message_thread_id: parsedThread.value,
       });
