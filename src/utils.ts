@@ -23,7 +23,10 @@ const DEFAULT_RETRY_BACKOFF = 2;
 const DEFAULT_RETRY_MAX_DELAY = 10000;
 
 /**
- * Проверяет и нормализует пользовательские опции транспорта.
+ * Проверяет и нормализует опции транспорта, заполняя значения по умолчанию.
+ *
+ * @param options Исходные пользовательские опции.
+ * @returns Нормализованный набор опций, готовый к работе транспорта.
  */
 export function normalizeOptions(options: TelegramTransportOptions): NormalizedOptions {
   if (!options || typeof options !== 'object') {
@@ -84,6 +87,9 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
 
 /**
  * Преобразует описание целевых чатов в унифицированный массив.
+ *
+ * @param options Опции транспорта с произвольным описанием chatId.
+ * @returns Массив целевых чатов.
  */
 function normalizeTargets(options: TelegramTransportOptions): TelegramChatTarget[] {
   const raw = Array.isArray(options.chatId) ? options.chatId : [options.chatId];
@@ -96,6 +102,10 @@ function normalizeTargets(options: TelegramTransportOptions): TelegramChatTarget
 
 /**
  * Нормализует единичное описание чата.
+ *
+ * @param entry Исходное описание чата или строки с chatId.
+ * @param defaultThread Общая тема по умолчанию.
+ * @returns Структура целевого чата или null, если найти chatId не удалось.
  */
 function normalizeTarget(entry: RawChatTarget, defaultThread?: number): TelegramChatTarget | null {
   if (typeof entry === 'number' || typeof entry === 'string') {
@@ -122,6 +132,10 @@ function normalizeTarget(entry: RawChatTarget, defaultThread?: number): Telegram
 
 /**
  * Собирает URL вызова метода Telegram Bot API.
+ *
+ * @param token Токен бота.
+ * @param method Имя метода Bot API.
+ * @returns Полный URL запроса.
  */
 export function buildTelegramUrl(token: string, method: string): string {
   return `${TELEGRAM_BASE_URL}/bot${token}/${method}`;
@@ -129,6 +143,9 @@ export function buildTelegramUrl(token: string, method: string): string {
 
 /**
  * Экранирует HTML-символы для безопасной вставки в сообщение.
+ *
+ * @param value Строка, подлежащая экранированию.
+ * @returns Экранированная строка.
  */
 export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -136,6 +153,10 @@ export function escapeHtml(value: string): string {
 
 /**
  * Обрезает строку до заданной длины, добавляя многоточие при необходимости.
+ *
+ * @param text Исходная строка.
+ * @param maxLength Максимальный размер строки.
+ * @returns Усечённая строка и флаг сокращения.
  */
 export function truncate(text: string, maxLength: number): { text: string; truncated: boolean } {
   if (text.length <= maxLength) {
@@ -147,6 +168,9 @@ export function truncate(text: string, maxLength: number): { text: string; trunc
 
 /**
  * Форматирует временную метку в ISO-строку.
+ *
+ * @param time Временная отметка или строка с датой.
+ * @returns Строка в формате ISO 8601.
  */
 export function formatTimestamp(time?: number | string): string {
   if (!time) {
@@ -160,6 +184,9 @@ export function formatTimestamp(time?: number | string): string {
 
 /**
  * Гарантирует, что значение представлено массивом.
+ *
+ * @param value Значение или массив значений.
+ * @returns Массив значений.
  */
 export function ensureArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];

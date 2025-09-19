@@ -30,6 +30,9 @@ const DEFAULT_CAPTION_LIMIT = 1024;
 /**
  * Форматтер, который автоматически выбирает метод Telegram Bot API исходя из описания медиа в логе.
  * Ожидается схема вида: `{ messageType: 'photo' | 'document' | 'text', mediaUrl?, mediaBuffer?, caption? }`.
+ *
+ * @param options Настройки для кастомизации ключей и ограничений.
+ * @returns Функция форматтера, совместимая с transport.formatMessage.
  */
 export function createMediaFormatter(
   options: MediaFormatterOptions = {},
@@ -99,6 +102,15 @@ export function createMediaFormatter(
   };
 }
 
+/**
+ * Приводит медиа-поля к допустимому виду (URL или TelegramInputFile).
+ *
+ * @param url Строковое значение mediaUrl.
+ * @param binary Сырые бинарные данные или объект TelegramInputFile.
+ * @param filename Имя файла по умолчанию.
+ * @param contentType MIME-тип по умолчанию.
+ * @returns Строка или TelegramInputFile либо undefined, если медиа отсутствует.
+ */
 function resolveMediaInput(
   url: string | undefined,
   binary: unknown,
@@ -124,6 +136,12 @@ function resolveMediaInput(
   return undefined;
 }
 
+/**
+ * Проверяет, соответствует ли значение структуре TelegramInputFile.
+ *
+ * @param value Проверяемое значение.
+ * @returns True, если значение содержит поле data.
+ */
 function isTelegramInputFile(value: unknown): value is TelegramInputFile {
   return (
     typeof value === 'object' &&
@@ -138,6 +156,12 @@ interface SerializedBuffer {
   data: number[];
 }
 
+/**
+ * Распознаёт объект, созданный через JSON.stringify(Buffer.from(...)).
+ *
+ * @param value Проверяемое значение.
+ * @returns True, если объект похож на сериализованный Buffer.
+ */
 function isSerializedBuffer(value: unknown): value is SerializedBuffer {
   return (
     typeof value === 'object' &&
@@ -147,6 +171,12 @@ function isSerializedBuffer(value: unknown): value is SerializedBuffer {
   );
 }
 
+/**
+ * Нормализует объект TelegramInputFile, гарантируя наличие Uint8Array.
+ *
+ * @param value Исходный TelegramInputFile.
+ * @returns Новая структура с нормализованными бинарными данными.
+ */
 function normalizeInputFile(value: TelegramInputFile): TelegramInputFile {
   const data = value.data;
   return {
@@ -156,6 +186,12 @@ function normalizeInputFile(value: TelegramInputFile): TelegramInputFile {
   };
 }
 
+/**
+ * Проверяет, можно ли трактовать значение как бинарное содержимое.
+ *
+ * @param value Проверяемое значение.
+ * @returns True, если значение является Buffer, Uint8Array, ArrayBuffer или сериализованным Buffer.
+ */
 function isBinaryLike(
   value: unknown,
 ): value is Buffer | Uint8Array | ArrayBuffer | SerializedBuffer {
@@ -168,6 +204,12 @@ function isBinaryLike(
   return isSerializedBuffer(value);
 }
 
+/**
+ * Приводит различные бинарные представления к Uint8Array.
+ *
+ * @param data Исходные данные.
+ * @returns Uint8Array с содержимым исходного значения.
+ */
 function toUint8Array(data: Buffer | Uint8Array | ArrayBuffer | SerializedBuffer): Uint8Array {
   if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) {
     return new Uint8Array(data);
@@ -184,6 +226,11 @@ function toUint8Array(data: Buffer | Uint8Array | ArrayBuffer | SerializedBuffer
   throw new TypeError('Unsupported binary payload');
 }
 
+/**
+ * Возвращает строку без ведущих/замыкающих пробелов или undefined.
+ *
+ * @param value Проверяемое значение.
+ */
 function readString(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim().length > 0) {
     return value.trim();
@@ -191,6 +238,13 @@ function readString(value: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Усекание подписи с учётом лимита Telegram.
+ *
+ * @param text Подпись, полученная от пользователя.
+ * @param limit Максимально допустимая длина.
+ * @returns Усечённая подпись.
+ */
 function truncateCaption(text: string, limit: number): string {
   if (text.length <= limit) {
     return text;

@@ -22,8 +22,12 @@ const LEVEL_ICONS: Record<string, string> = {
 const RESERVED_FIELDS = new Set(['level', 'time', 'msg', 'context', 'err']);
 
 /**
- * Формирует текст сообщения для Telegram. При наличии пользовательского форматтера
- * делегирует работу ему, иначе использует встроенный формат.
+ * Формирует полезную нагрузку для Telegram-сообщения на основе записи pino.
+ * При наличии пользовательского форматтера делегирует работу ему, иначе использует формат по умолчанию.
+ *
+ * @param input Данные о логе и целевом чате, полученные от транспорта.
+ * @param options Нормализованные опции транспорта.
+ * @returns Текст сообщения и дополнительные поля для Telegram.
  */
 export async function buildMessage(
   input: FormatMessageInput,
@@ -35,6 +39,13 @@ export async function buildMessage(
   return ensureMaxLength(result, options.maxMessageLength);
 }
 
+/**
+ * Формирует сообщение в стандартном HTML-формате, добавляя уровень, время, контекст и ошибки.
+ *
+ * @param input Данные о логе и назначении сообщения.
+ * @param options Нормализованные опции транспорта.
+ * @returns Сообщение с текстом и дополнительными параметрами.
+ */
 export function buildDefaultMessage(
   input: FormatMessageInput,
   options: NormalizedOptions,
@@ -68,6 +79,12 @@ export function buildDefaultMessage(
   return { text: textContent, extra: {} };
 }
 
+/**
+ * Преобразует числовой уровень pino в строковый ярлык.
+ *
+ * @param level Числовой уровень логирования.
+ * @returns Название уровня в верхнем регистре.
+ */
 function resolveLevel(level?: number): string {
   if (!level) {
     return 'INFO';
@@ -75,10 +92,23 @@ function resolveLevel(level?: number): string {
   return LEVEL_LABELS[level] ?? `LEVEL ${level}`;
 }
 
+/**
+ * Экранирует HTML и заменяет переводы строк, чтобы текст безопасно отображался в Telegram.
+ *
+ * @param message Исходное сообщение лога.
+ * @returns Подготовленная строка для отправки в Telegram.
+ */
 function sanitizeMessage(message: string): string {
   return escapeHtml(message).replace(/\r?\n/g, '<br/>');
 }
 
+/**
+ * Извлекает пользовательский контекст из записи pino согласно настройкам транспорта.
+ *
+ * @param log Исходный лог pino.
+ * @param options Нормализованные опции транспорта.
+ * @returns Контекст или undefined, если контекст отключён.
+ */
 function extractContext(log: PinoLog, options: NormalizedOptions): unknown {
   if (!options.includeContext) {
     return undefined;
@@ -91,11 +121,25 @@ function extractContext(log: PinoLog, options: NormalizedOptions): unknown {
   return undefined;
 }
 
+/**
+ * Форматирует объекты для отображения в секциях Context/Extras/Error.
+ *
+ * @param title Заголовок блока.
+ * @param value Значение, которое нужно вывести.
+ * @returns HTML-блок с заголовком и содержимым в теге <pre>.
+ */
 function formatContextBlock(title: string, value: unknown): string {
   const rendered = escapeHtml(JSON.stringify(value, null, 2));
   return `<b>${escapeHtml(title)}:</b>\n<pre>${rendered}</pre>`;
 }
 
+/**
+ * Собирает информацию об ошибке из поля err записи pino.
+ *
+ * @param log Исходный лог pino.
+ * @param headings Пользовательские заголовки форматтера.
+ * @returns Готовый HTML-блок или undefined, если err отсутствует.
+ */
 function formatError(log: PinoLog, headings: NormalizedOptions['headings']): string | undefined {
   const err = log.err as Record<string, unknown> | undefined;
   if (!err) {
@@ -108,6 +152,13 @@ function formatError(log: PinoLog, headings: NormalizedOptions['headings']): str
   return formatContextBlock(headings.error, payload);
 }
 
+/**
+ * Формирует секцию Extras на основе настроек includeExtras и списка ключей.
+ *
+ * @param log Исходный лог pino.
+ * @param options Нормализованные опции транспорта.
+ * @returns Объект с дополнительными полями или undefined.
+ */
 function extractExtras(
   log: PinoLog,
   options: NormalizedOptions,
@@ -139,6 +190,13 @@ function extractExtras(
   return Object.fromEntries(entries);
 }
 
+/**
+ * Контролирует длину текста сообщения и добавляет уведомление при усечении.
+ *
+ * @param result Результат форматтера.
+ * @param maxLength Максимальная длина, допустимая Telegram.
+ * @returns Обновлённый результат с учётом ограничений длины.
+ */
 function ensureMaxLength(result: FormatMessageResult, maxLength: number): FormatMessageResult {
   const { text, extra, method } = result;
   const { text: trimmed, truncated } = truncate(text, maxLength);

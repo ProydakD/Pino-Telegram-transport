@@ -23,7 +23,12 @@ export interface TelegramErrorResponse {
 }
 
 /**
- * Ошибка, выбрасываемая при отрицательном ответе Telegram Bot API.
+ * Исключение, сигнализирующее о неудачной доставке сообщения в Telegram Bot API.
+ *
+ * @param message Подробное описание ошибки.
+ * @param response Ответ Telegram API, если он доступен.
+ * @param status HTTP-статус ответа Telegram API.
+ * @param cause Исходная ошибка сети или парсинга.
  */
 export class TelegramDeliveryError extends Error {
   constructor(
@@ -39,12 +44,17 @@ export class TelegramDeliveryError extends Error {
 }
 
 /**
- * Инкапсулирует работу с Telegram Bot API: либо отправляет HTTP-запрос,
- * либо делегирует отправку пользовательской функции send.
+ * Клиент, который отправляет запросы в Telegram Bot API или делегирует работу пользовательскому send.
+ * Отвечает за подготовку multipart-запросов, повторные попытки и нормализацию бинарных полей.
  */
 export class TelegramClient {
   constructor(private readonly options: NormalizedOptions) {}
 
+  /**
+   * Отправляет запрос в Telegram, выполняя повторные попытки при временных ошибках.
+   *
+   * @param request Готовый Telegram-запрос, сформированный транспортом.
+   */
   async send(request: TelegramRequest): Promise<void> {
     await this.executeWithRetry(async () => {
       if (this.options.send) {
@@ -84,6 +94,12 @@ export class TelegramClient {
     });
   }
 
+  /**
+   * Подготавливает тело HTTP-запроса: JSON или multipart/form-data при наличии бинарных данных.
+   *
+   * @param request Telegram-запрос с полезной нагрузкой.
+   * @returns Тело запроса и дополнительные заголовки.
+   */
   private prepareRequestBody(request: TelegramRequest): {
     body: FetchBody;
     headers?: Record<string, string>;
@@ -100,6 +116,12 @@ export class TelegramClient {
     };
   }
 
+  /**
+   * Формирует multipart/form-data для передачи файлов в Telegram.
+   *
+   * @param payload Полезная нагрузка метода Telegram.
+   * @returns Экземпляр FormData с сериализованными полями.
+   */
   private buildMultipartBody(payload: TelegramSendPayload): FormData {
     const form = new FormData();
 
@@ -125,6 +147,12 @@ export class TelegramClient {
     return form;
   }
 
+  /**
+   * Сериализует произвольное значение в строку для multipart-поля.
+   *
+   * @param value Значение, полученное из полезной нагрузки.
+   * @returns Строковое представление значения.
+   */
   private serializeFormValue(value: unknown): string {
     if (typeof value === 'string') {
       return value;
@@ -135,6 +163,12 @@ export class TelegramClient {
     return JSON.stringify(value);
   }
 
+  /**
+   * Проверяет, содержит ли полезная нагрузка бинарные данные.
+   *
+   * @param payload Полезная нагрузка Telegram.
+   * @returns True, если payload включает поля photo/document с бинарным содержимым.
+   */
   private containsBinary(payload: TelegramSendPayload): boolean {
     if ('photo' in payload && this.isInputFileValue(payload.photo)) {
       return true;
@@ -148,6 +182,12 @@ export class TelegramClient {
     return false;
   }
 
+  /**
+   * Определяет, относится ли поле полезной нагрузки к бинарным и содержит ли оно файл.
+   *
+   * @param field Имя поля Telegram.
+   * @param value Значение поля.
+   */
   private isBinaryField(field: string, value: unknown): boolean {
     if (field === 'photo' || field === 'document') {
       return this.isInputFileValue(value);
@@ -155,6 +195,12 @@ export class TelegramClient {
     return false;
   }
 
+  /**
+   * Проверяет, содержит ли значение бинарные данные для отправки как InputFile.
+   *
+   * @param value Проверяемое значение.
+   * @returns True, если значение представляет Buffer, Uint8Array, ArrayBuffer или сериализованный Buffer.
+   */
   private isInputFileValue(value: unknown): boolean {
     if (value === undefined || value === null) {
       return false;
@@ -174,6 +220,13 @@ export class TelegramClient {
     return this.isSerializedBuffer(value);
   }
 
+  /**
+   * Приводит значение поля photo/document к объекту TelegramInputFile.
+   *
+   * @param value Исходное значение.
+   * @param field Имя поля (photo или document) для сообщений об ошибках.
+   * @returns Приведённый TelegramInputFile.
+   */
   private normalizeInputFile(value: unknown, field: 'photo' | 'document'): TelegramInputFile {
     if (this.isTelegramInputFile(value)) {
       return {
@@ -200,6 +253,11 @@ export class TelegramClient {
     throw new Error(`Значение поля ${field} должно быть URL или двоичным содержимым.`);
   }
 
+  /**
+   * Проверяет, соответствует ли значение объекту TelegramInputFile.
+   *
+   * @param value Проверяемое значение.
+   */
   private isTelegramInputFile(value: unknown): value is TelegramInputFile {
     return (
       typeof value === 'object' &&
@@ -209,6 +267,11 @@ export class TelegramClient {
     );
   }
 
+  /**
+   * Распознаёт сериализованный Buffer (формат JSON.stringify(Buffer.from(...))).
+   *
+   * @param value Проверяемое значение.
+   */
   private isSerializedBuffer(value: unknown): value is SerializedBuffer {
     return (
       typeof value === 'object' &&
@@ -218,6 +281,12 @@ export class TelegramClient {
     );
   }
 
+  /**
+   * Конвертирует Uint8Array в ArrayBuffer без лишних копий.
+   *
+   * @param view Входной буфер.
+   * @returns ArrayBuffer с данными.
+   */
   private toArrayBuffer(view: Uint8Array): ArrayBuffer {
     if (view.buffer instanceof ArrayBuffer) {
       if (view.byteOffset === 0 && view.byteLength === view.buffer.byteLength) {
@@ -228,6 +297,12 @@ export class TelegramClient {
     return view.slice().buffer;
   }
 
+  /**
+   * Приводит различные бинарные контейнеры к Uint8Array.
+   *
+   * @param data Исходные бинарные данные.
+   * @returns Uint8Array с содержимым исходного значения.
+   */
   private toUint8Array(data: Buffer | Uint8Array | ArrayBuffer | SerializedBuffer): Uint8Array {
     if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) {
       return new Uint8Array(data);
@@ -244,14 +319,31 @@ export class TelegramClient {
     throw new TypeError('Unsupported binary payload');
   }
 
+  /**
+   * Возвращает имя файла по умолчанию для медиа-поля.
+   *
+   * @param field Тип поля (photo или document).
+   * @returns Имя файла по умолчанию.
+   */
   private defaultFilename(field: 'photo' | 'document'): string {
     return field === 'photo' ? 'photo.jpg' : 'document.bin';
   }
 
+  /**
+   * Возвращает content-type по умолчанию для медиа-поля.
+   *
+   * @param field Тип поля (photo или document).
+   * @returns MIME-тип по умолчанию.
+   */
   private defaultContentType(field: 'photo' | 'document'): string {
     return field === 'photo' ? 'image/jpeg' : 'application/octet-stream';
   }
 
+  /**
+   * Выполняет операцию с повторными попытками согласно настройкам транспорта.
+   *
+   * @param operation Асинхронная операция отправки запроса.
+   */
   private async executeWithRetry(operation: () => Promise<void>): Promise<void> {
     const { retryAttempts, retryInitialDelay, retryBackoffFactor, retryMaxDelay } = this.options;
     let attempt = 0;
@@ -276,6 +368,12 @@ export class TelegramClient {
     }
   }
 
+  /**
+   * Определяет, стоит ли повторять запрос после ошибки.
+   *
+   * @param error Ошибка отправки.
+   * @returns True, если ошибка временная или связана с rate limit.
+   */
   private isRetryable(error: unknown): boolean {
     if (error instanceof TelegramDeliveryError) {
       const code = this.resolveStatusCode(error);
@@ -291,6 +389,13 @@ export class TelegramClient {
     return false;
   }
 
+  /**
+   * Рассчитывает задержку перед следующей попыткой с учётом retry_after.
+   *
+   * @param error Ошибка, полученная при отправке.
+   * @param fallback Базовая задержка.
+   * @returns Время ожидания в миллисекундах.
+   */
   private resolveRetryDelay(error: unknown, fallback: number): number {
     if (error instanceof TelegramDeliveryError) {
       const retryAfter = this.extractRetryAfter(error);
@@ -301,6 +406,12 @@ export class TelegramClient {
     return Math.max(0, fallback);
   }
 
+  /**
+   * Извлекает HTTP-статус из ошибки доставки.
+   *
+   * @param error Ошибка доставки.
+   * @returns Код состояния или undefined.
+   */
   private resolveStatusCode(error: TelegramDeliveryError): number | undefined {
     if (typeof error.status === 'number') {
       return error.status;
@@ -309,6 +420,12 @@ export class TelegramClient {
     return typeof code === 'number' ? code : undefined;
   }
 
+  /**
+   * Извлекает значение retry_after из ответа Telegram.
+   *
+   * @param error Ошибка доставки.
+   * @returns Задержка в миллисекундах или undefined.
+   */
   private extractRetryAfter(error: TelegramDeliveryError): number | undefined {
     const parameters = error.response?.parameters as { retry_after?: number | string } | undefined;
     const candidate = parameters?.retry_after;
@@ -323,6 +440,11 @@ export class TelegramClient {
   }
 }
 
+/**
+ * Асинхронная задержка, используемая при повторных попытках.
+ *
+ * @param ms Длительность ожидания в миллисекундах.
+ */
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
     return Promise.resolve();

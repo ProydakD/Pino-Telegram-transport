@@ -42,8 +42,12 @@ export {
 export type { NestLoggerOptions, NestLoggerOverrides, FastifyLoggerOptions } from './adapters';
 
 /**
- * Создаёт потоковый транспорт для Pino, пересылающий сообщения в Telegram Bot API.
- * Если обязательные параметры не указаны, возвращает no-op поток и выводит предупреждение.
+ * Создаёт потоковый транспорт для Pino и настраивает внутренние зависимости.
+ * Транспорт нормализует конфигурацию, инициализирует очередь и ограничитель частоты
+ * и пересылает каждое сообщение во все целевые чаты Telegram.
+ *
+ * @param options Пользовательские настройки транспорта для Telegram Bot API.
+ * @returns Поток транспорта pino; при критических ошибках конфигурации возвращается поток-заглушка.
  */
 export default function telegramTransport(options: TelegramTransportOptions) {
   let normalized: ReturnType<typeof normalizeOptions>;
@@ -98,7 +102,9 @@ export default function telegramTransport(options: TelegramTransportOptions) {
   return stream;
 
   /**
-   * Обрабатывает запись лога: форматирует и последовательно отправляет во все целевые чаты.
+   * Формирует Telegram-запрос из записи Pino и отправляет его всем настроенным чатам.
+   *
+   * @param log Структурированная запись журнала, полученная от pino.
    */
   async function processLog(log: PinoLog): Promise<void> {
     for (const target of normalized.targets) {
@@ -122,8 +128,11 @@ export default function telegramTransport(options: TelegramTransportOptions) {
   }
 
   /**
-   * Единая точка логирования ошибок доставки. Вызывает пользовательский обработчик,
-   * если он предоставлен, иначе выводит сообщение в stderr.
+   * Централизованно обрабатывает ошибки доставки сообщений в Telegram.
+   * Сначала проксирует ошибку в пользовательский обработчик, а затем логирует её в stderr при его отсутствии.
+   *
+   * @param error Первоначальная ошибка доставки или обработки лога.
+   * @param request Исходный Telegram-запрос, если он уже был сформирован.
    */
   function handleError(error: unknown, request?: TelegramRequest) {
     if (normalized.onDeliveryError) {
@@ -138,6 +147,13 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
   }
 
+  /**
+   * Преобразует форматированное сообщение в конкретный Telegram-запрос.
+   *
+   * @param target Описание чата и темы, куда следует отправить сообщение.
+   * @param message Результат работы форматтера, содержащий текст и дополнительные поля.
+   * @returns Готовый Telegram-запрос с выбранным методом и полезной нагрузкой.
+   */
   function buildRequest(target: TelegramChatTarget, message: FormatMessageResult): TelegramRequest {
     const method: TelegramMethod = message.method ?? 'sendMessage';
     const base = createBasePayload(target);
@@ -190,6 +206,12 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
   }
 
+  /**
+   * Формирует базовые поля запроса с учётом настроек транспорта.
+   *
+   * @param target Целевой чат и опциональная тема из настроек.
+   * @returns Базовая полезная нагрузка Telegram без медиа-специфичных полей.
+   */
   function createBasePayload(target: TelegramChatTarget): TelegramBasePayload {
     const base: TelegramBasePayload = {
       chat_id: target.chatId,
@@ -203,6 +225,14 @@ export default function telegramTransport(options: TelegramTransportOptions) {
   }
 }
 
+/**
+ * Приводит медиаполя форматтера к форме, совместимой с Telegram API.
+ * Строки интерпретируются как готовые file_id или URL, бинарные данные превращаются в TelegramInputFile.
+ *
+ * @param value Исходное значение из форматтера.
+ * @param field Тип медиаполя, определяющий значения по умолчанию.
+ * @returns Значение, подходящее для вставки в запрос Telegram, либо undefined.
+ */
 function normalizeMediaValue(
   value: unknown,
   field: 'photo' | 'document',
@@ -228,6 +258,12 @@ function normalizeMediaValue(
   return undefined;
 }
 
+/**
+ * Проверяет, соответствует ли значение ожиданиям TelegramInputFile.
+ *
+ * @param value Произвольное значение из форматтера.
+ * @returns True, если значение похоже на объект TelegramInputFile.
+ */
 function isTelegramInputFileValue(value: unknown): value is TelegramInputFile {
   return (
     typeof value === 'object' &&
@@ -251,6 +287,12 @@ function isSerializedBuffer(value: unknown): value is SerializedBuffer {
   );
 }
 
+/**
+ * Определяет, можно ли трактовать значение как бинарное содержимое.
+ *
+ * @param value Проверяемое значение.
+ * @returns True, если значение представляет Buffer, Uint8Array, ArrayBuffer или сериализованный Buffer.
+ */
 function isBinaryLike(
   value: unknown,
 ): value is Buffer | Uint8Array | ArrayBuffer | SerializedBuffer {
@@ -263,6 +305,12 @@ function isBinaryLike(
   return isSerializedBuffer(value);
 }
 
+/**
+ * Приводит разные бинарные контейнеры к Uint8Array.
+ *
+ * @param data Исходные бинарные данные.
+ * @returns Uint8Array с содержимым исходного значения.
+ */
 function toUint8Array(data: Buffer | Uint8Array | ArrayBuffer | SerializedBuffer): Uint8Array {
   if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) {
     return new Uint8Array(data);
@@ -279,16 +327,29 @@ function toUint8Array(data: Buffer | Uint8Array | ArrayBuffer | SerializedBuffer
   throw new TypeError('Unsupported binary payload');
 }
 
+/**
+ * Возвращает имя файла по умолчанию для загрузки медиа.
+ *
+ * @param field Тип медиаполя (photo или document).
+ */
 function defaultFilename(field: 'photo' | 'document'): string {
   return field === 'photo' ? 'photo.jpg' : 'document.bin';
 }
 
+/**
+ * Возвращает content-type по умолчанию для выбранного типа медиа.
+ *
+ * @param field Тип медиаполя (photo или document).
+ */
 function defaultContentType(field: 'photo' | 'document'): string {
   return field === 'photo' ? 'image/jpeg' : 'application/octet-stream';
 }
 
 /**
- * Возвращает no-op поток, который просто проглатывает входящие данные.
+ * Создаёт поток-заглушку, который игнорирует все входящие сообщения Pino.
+ * Используется, когда транспорт невозможно инициализировать из-за ошибок конфигурации.
+ *
+ * @returns Поток, совместимый с pino, который не выполняет никаких действий.
  */
 function createNoopStream() {
   return build((source) => {
@@ -298,7 +359,10 @@ function createNoopStream() {
 }
 
 /**
- * Преобразует входящие данные Pino в объект лога или возвращает null, если парсинг невозможен.
+ * Преобразует произвольный chunk из pino в объект лога.
+ *
+ * @param chunk Входящее значение из потока pino.
+ * @returns Распарсенный лог или null, если данные нельзя распознать.
  */
 function parseLog(chunk: unknown): PinoLog | null {
   if (!chunk) {
@@ -322,7 +386,10 @@ function parseLog(chunk: unknown): PinoLog | null {
 }
 
 /**
- * Ключ, по которому хранятся временные метки в лимитере частоты.
+ * Преобразует идентификатор чата в строковый ключ для rate limiter.
+ *
+ * @param chatId Идентификатор Telegram-чата.
+ * @returns Строковый ключ для карты задержек.
  */
 function getTargetKey(chatId: TelegramMessagePayload['chat_id']): string {
   return String(chatId);

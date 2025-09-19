@@ -46,6 +46,14 @@ interface TelegramResponse<T> {
   error_code?: number;
 }
 
+/**
+ * Специализированное исключение CLI для сохранения HTTP-статуса и кода ошибки Telegram.
+ *
+ * @param message Описание ошибки.
+ * @param status HTTP-статус ответа Telegram.
+ * @param errorCode Код ошибки Telegram.
+ * @param cause Первоначальная ошибка.
+ */
 class TelegramCliError extends Error {
   constructor(
     message: string,
@@ -66,6 +74,13 @@ const defaultContext: CliContext = {
   cwd: () => process.cwd(),
 };
 
+/**
+ * Точка входа CLI. Разбирает аргументы, применяет позиционные сокращения и исполняет команду.
+ *
+ * @param argv Сырые аргументы командной строки без node и имени скрипта.
+ * @param partialContext Зависимости окружения, которые можно переопределить в тестах.
+ * @returns Код завершения процесса.
+ */
 export async function runCli(
   argv: string[],
   partialContext: Partial<CliContext> = {},
@@ -103,6 +118,12 @@ export async function runCli(
   }
 }
 
+/**
+ * Разбирает массив аргументов на команду, позиционные аргументы и опции.
+ *
+ * @param args Аргументы после имени команды.
+ * @returns Структура с именем команды, позиционными аргументами и опциями.
+ */
 function parseArgs(args: string[]): ParsedArgs {
   const options: CliOptions = {};
   const positionals: string[] = [];
@@ -155,6 +176,12 @@ function parseArgs(args: string[]): ParsedArgs {
   };
 }
 
+/**
+ * Приводит строку к одному из поддерживаемых имён команд CLI.
+ *
+ * @param value Кандидат на имя команды.
+ * @returns Имя команды или undefined, если строка не распознана.
+ */
 function normalizeCommandName(value?: string): CommandName | undefined {
   if (!value) {
     return undefined;
@@ -172,10 +199,22 @@ function normalizeCommandName(value?: string): CommandName | undefined {
   return undefined;
 }
 
+/**
+ * Преобразует kebab-case опции в camelCase для внутренних ключей.
+ *
+ * @param value Имя опции из аргументов командной строки.
+ * @returns Имя опции в camelCase.
+ */
 function toCamelCase(value: string): string {
   return value.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
+/**
+ * Определяет, следует ли трактовать следующий аргумент как значение текущей опции.
+ *
+ * @param next Следующий аргумент командной строки.
+ * @returns True, если аргумент нужно потребить как значение.
+ */
 function shouldConsumeValue(next: string | undefined): next is string {
   if (next === undefined || next === '--') {
     return false;
@@ -186,6 +225,13 @@ function shouldConsumeValue(next: string | undefined): next is string {
   return /^-[0-9]/.test(next);
 }
 
+/**
+ * Поддерживает короткую форму вызова команд через позиционные аргументы.
+ *
+ * @param command Имя команды.
+ * @param positionals Позиционные аргументы, переданные пользователем.
+ * @param options Объект опций, который будет дополнен сокращениями.
+ */
 function applyPositionalShortcuts(
   command: CommandName,
   positionals: string[],
@@ -212,6 +258,13 @@ function applyPositionalShortcuts(
   }
 }
 
+/**
+ * Выполняет команду `check`: проверяет токен, чат и необязательную тему.
+ *
+ * @param options Опции командной строки.
+ * @param context Контекст ввода-вывода CLI.
+ * @returns Код завершения команды.
+ */
 async function handleCheck(options: CliOptions, context: CliContext): Promise<number> {
   const tokenCandidate = pickOption(options, ['token', 'botToken']);
   if (typeof tokenCandidate === 'boolean') {
@@ -291,6 +344,15 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
   return hasFailures ? 1 : 0;
 }
 
+/**
+ * Пытается удалить временное сообщение, созданное во время проверки.
+ * Ошибки удаления подавляются, чтобы не нарушать основной сценарий проверки.
+ *
+ * @param token Токен Telegram-бота.
+ * @param chatId Идентификатор чата.
+ * @param messageId Идентификатор отправленного сообщения.
+ * @param context Контекст CLI для логирования.
+ */
 async function attemptDeleteMessage(
   token: string,
   chatId: string | number,
@@ -307,6 +369,13 @@ async function attemptDeleteMessage(
   }
 }
 
+/**
+ * Генерирует пример конфигурации транспорта и сохраняет его на диск.
+ *
+ * @param options Опции командной строки.
+ * @param context Контекст ввода-вывода CLI.
+ * @returns Код завершения команды.
+ */
 async function handleGenerateConfig(options: CliOptions, context: CliContext): Promise<number> {
   const tokenCandidate = pickOption(options, ['token', 'botToken']);
   if (typeof tokenCandidate === 'boolean') {
@@ -400,6 +469,13 @@ async function handleGenerateConfig(options: CliOptions, context: CliContext): P
   return 0;
 }
 
+/**
+ * Выбирает первое доступное значение опции из списка алиасов.
+ *
+ * @param options Объект опций.
+ * @param keys Список синонимов опции.
+ * @returns Значение опции или undefined.
+ */
 function pickOption(options: CliOptions, keys: string[]): CliOptionValue | undefined {
   for (const key of keys) {
     if (options[key] !== undefined) {
@@ -409,6 +485,12 @@ function pickOption(options: CliOptions, keys: string[]): CliOptionValue | undef
   return undefined;
 }
 
+/**
+ * Разбирает список идентификаторов чатов из строки.
+ *
+ * @param value Строка со значениями через запятую.
+ * @returns Массив идентификаторов (строк).
+ */
 function parseChatList(value?: string): string[] {
   if (!value) {
     return [];
@@ -419,6 +501,12 @@ function parseChatList(value?: string): string[] {
     .filter((chunk) => chunk.length > 0);
 }
 
+/**
+ * Проверяет корректность значения threadId, переданного пользователем.
+ *
+ * @param value Строковое представление threadId.
+ * @returns Объект с числовым значением или описанием ошибки.
+ */
 function parseThreadId(value?: string): { value?: number; error?: string } {
   if (value === undefined || value === '') {
     return {};
@@ -430,6 +518,14 @@ function parseThreadId(value?: string): { value?: number; error?: string } {
   return { value: numeric };
 }
 
+/**
+ * Универсальный помощник для вызова методов Telegram Bot API.
+ *
+ * @param token Токен бота.
+ * @param method Имя вызываемого метода.
+ * @param payload Тело запроса к Telegram.
+ * @returns Результат, разобранный из ответа Telegram.
+ */
 async function callTelegram<T>(
   token: string,
   method: string,
@@ -469,6 +565,13 @@ async function callTelegram<T>(
   return data.result;
 }
 
+/**
+ * Строит URL метода Telegram с учётом токена.
+ *
+ * @param token Токен бота.
+ * @param method Имя метода Telegram.
+ * @returns Полный URL HTTP-запроса.
+ */
 function buildTelegramMethodUrl(
   token: string,
   method: string,
@@ -488,6 +591,12 @@ function buildTelegramMethodUrl(
   return `${base}?${search.toString()}`;
 }
 
+/**
+ * Форматирует информацию о боте для вывода в консоль.
+ *
+ * @param bot Данные о боте из Telegram.
+ * @returns Человекочитаемая строка.
+ */
 function formatBot(bot: BotInfo): string {
   if (bot.username) {
     return `@${bot.username} (${bot.first_name})`;
@@ -495,6 +604,12 @@ function formatBot(bot: BotInfo): string {
   return `${bot.first_name} [${bot.id}]`;
 }
 
+/**
+ * Форматирует информацию о чате для вывода в консоль.
+ *
+ * @param chat Данные о чате из Telegram.
+ * @returns Человекочитаемая строка.
+ */
 function formatChat(chat: ChatInfo): string {
   const parts: string[] = [];
   if (chat.title) {
@@ -510,6 +625,13 @@ function formatChat(chat: ChatInfo): string {
   return parts.join(' — ');
 }
 
+/**
+ * Преобразует ошибку Telegram в человекочитаемую строку.
+ *
+ * @param prefix Префикс сообщения об ошибке.
+ * @param error Ошибка, полученная при вызове API.
+ * @returns Описание ошибки.
+ */
 function formatTelegramError(prefix: string, error: unknown): string {
   if (error instanceof TelegramCliError) {
     const details: string[] = [];
@@ -528,6 +650,11 @@ function formatTelegramError(prefix: string, error: unknown): string {
   return `${prefix}: неизвестная ошибка`;
 }
 
+/**
+ * Печатает справку по CLI-командам.
+ *
+ * @param context Контекст ввода-вывода.
+ */
 function printHelp(context: CliContext): void {
   const lines = [
     'pino-telegram-cli — утилита для проверки Telegram Bot API и генерации конфигурации транспорта.',
