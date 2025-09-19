@@ -35,9 +35,8 @@ interface ChatInfo {
   username?: string;
 }
 
-interface ForumTopicInfo {
-  message_thread_id: number;
-  name: string;
+interface SentMessage {
+  message_id: number;
 }
 
 interface TelegramResponse<T> {
@@ -134,6 +133,10 @@ function parseArgs(args: string[]): ParsedArgs {
       continue;
     }
     if (arg.startsWith('-') && arg.length > 1) {
+      if (/^-[0-9]/.test(arg)) {
+        positionals.push(arg);
+        continue;
+      }
       for (const flag of arg.slice(1)) {
         if (flag === 'h') {
           options.help = true;
@@ -271,11 +274,14 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
     const chatId = chats[0];
     context.stdout(`Проверка темы ${parsedThread.value} в чате ${chatId}…`);
     try {
-      const topic = await callTelegram<ForumTopicInfo>(token, 'getForumTopic', {
+      const probe = await callTelegram<SentMessage>(token, 'sendMessage', {
         chat_id: chatId,
         message_thread_id: parsedThread.value,
+        text: 'pino-telegram-cli thread probe',
+        disable_notification: true,
       });
-      context.stdout(`✅ Тема доступна: ${topic.name} (ID ${topic.message_thread_id})`);
+      await attemptDeleteMessage(token, chatId, probe.message_id, context);
+      context.stdout(`✅ Тема доступна: ID ${parsedThread.value}`);
     } catch (error) {
       context.stderr(formatTelegramError('❌ Не удалось проверить тему', error));
       return 1;
@@ -283,6 +289,22 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
   }
 
   return hasFailures ? 1 : 0;
+}
+
+async function attemptDeleteMessage(
+  token: string,
+  chatId: string | number,
+  messageId: number,
+  context: CliContext,
+): Promise<void> {
+  try {
+    await callTelegram<boolean>(token, 'deleteMessage', {
+      chat_id: chatId,
+      message_id: messageId,
+    });
+  } catch (error) {
+    context.stderr(formatTelegramError('⚠️ Не удалось удалить контрольное сообщение', error));
+  }
 }
 
 async function handleGenerateConfig(options: CliOptions, context: CliContext): Promise<number> {

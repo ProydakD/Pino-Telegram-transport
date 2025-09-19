@@ -14,6 +14,7 @@ The bundled command line utility helps you validate Telegram credentials before 
 - Run `pino-telegram-cli check --token <token>` to verify that the bot token is accepted by Telegram.
 - Pass `--chat-id <id>` (comma-separated for multiple chats) to ensure the bot can access each destination.
 - Supply `--thread-id <id>` along with a single chat to confirm that a forum topic is reachable.
+- Let the CLI send a muted probe message to that topic (it deletes the message right away) to verify access.
 - Omit explicit flags if you export `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_THREAD_ID` in the environment.
 - Expect a non-zero exit code if Telegram rejects the token, chat, or thread.
 

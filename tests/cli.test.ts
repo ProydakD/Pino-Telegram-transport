@@ -117,4 +117,42 @@ describe('CLI утилита', () => {
     expect(exitCode).toBe(0);
     expect(stdoutMessages.join('\n')).toContain('TELEGRAM_CHAT_ID=-100,-200');
   });
+  it('проверяет тему форума', async () => {
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: 1, first_name: 'TestBot', username: 'test_bot' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: -100, type: 'supergroup', title: 'Logs', is_forum: true },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { message_id: 42 },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: true,
+      }),
+    );
+
+    const { context, stdoutMessages, stderrMessages } = createContext();
+
+    const exitCode = await runCli(
+      ['check', '--token', '123:ABC', '--chat-id', '-100', '--thread-id', '777'],
+      context,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(stdoutMessages.some((line) => line.includes('Тема доступна'))).toBe(true);
+    expect(stderrMessages.some((line) => line.includes('Не удалось удалить'))).toBe(false);
+  });
 });
