@@ -114,10 +114,10 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
  */
 function normalizeTargets(options: TelegramTransportOptions): TelegramChatTarget[] {
   const raw = Array.isArray(options.chatId) ? options.chatId : [options.chatId];
-  const threadId = options.threadId;
+  const threadId = coerceThreadId((options as unknown as { threadId?: unknown }).threadId);
 
   return raw
-    .map((entry) => normalizeTarget(entry, threadId))
+    .map((entry) => normalizeTarget(entry as RawChatTarget, threadId))
     .filter((target): target is TelegramChatTarget => Boolean(target));
 }
 
@@ -140,15 +140,34 @@ function normalizeTarget(entry: RawChatTarget, defaultThread?: number): Telegram
     return null;
   }
 
-  const { chatId, threadId } = entry as TelegramChatTarget;
+  const { chatId, threadId } = entry as TelegramChatTarget & { threadId?: unknown };
   if (chatId === undefined || chatId === null) {
     return null;
   }
 
   return {
     chatId,
-    threadId: threadId ?? defaultThread,
+    threadId: coerceThreadId(threadId) ?? defaultThread,
   };
+}
+
+/**
+ * Приводит значение идентификатора темы к числу, если возможно.
+ * Принимает number, numeric string, игнорирует пустые строки и NaN.
+ */
+function coerceThreadId(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.trunc(value) : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return undefined;
+    return Math.trunc(parsed);
+  }
+  return undefined;
 }
 
 function resolveMinLevel(level: TelegramTransportOptions['minLevel']): number {

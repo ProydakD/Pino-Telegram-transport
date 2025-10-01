@@ -476,6 +476,35 @@ describe('pino-telegram transport', () => {
     expect(secondPayload.message_thread_id).toBe(77);
   });
 
+  it('accepts threadId passed as a string (options and per-target)', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        // threadId provided as string in options
+        threadId: '555' as unknown as number,
+        // mix target forms, second with its own string threadId overriding default
+        chatId: [12345, { chatId: -999, threadId: '777' as unknown as number }],
+        send: recorder.send,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'String threadIds' })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    expect(recorder.requests).toHaveLength(2);
+    const [first, second] = recorder.requests;
+    const p1 = first.payload as TelegramMessagePayload;
+    const p2 = second.payload as TelegramMessagePayload;
+    expect(p1.chat_id).toBe(12345);
+    expect(p1.message_thread_id).toBe(555);
+    expect(p2.chat_id).toBe(-999);
+    expect(p2.message_thread_id).toBe(777);
+  });
+
   it('enforces minimal delay between messages', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
