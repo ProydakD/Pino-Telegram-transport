@@ -55,9 +55,14 @@ export default function telegramTransport(options: TelegramTransportOptions) {
   try {
     normalized = normalizeOptions(options);
   } catch (error) {
+    const code = (error as { code?: string } | undefined)?.code;
     if (
       error instanceof Error &&
-      (error.message.includes('botToken') || error.message.includes('целевого чата'))
+      (code === 'MISSING_BOT_TOKEN' ||
+        code === 'NO_CHAT_TARGET' ||
+        error.message.includes('botToken') ||
+        error.message.includes('целевого чата') ||
+        error.message.includes('Не найдено'))
     ) {
       console.warn(`[pino-telegram] transport disabled: ${error.message}`);
       return createNoopStream();
@@ -77,6 +82,9 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     source.on('data', (chunk: unknown) => {
       const log = parseLog(chunk);
       if (!log) {
+        return;
+      }
+      if (!shouldProcessLog(log)) {
         return;
       }
 
@@ -125,6 +133,12 @@ export default function telegramTransport(options: TelegramTransportOptions) {
         handleError(error, request);
       }
     }
+  }
+  function shouldProcessLog(log: PinoLog): boolean {
+    if (typeof log.level !== 'number') {
+      return true;
+    }
+    return log.level >= normalized.minLevel;
   }
 
   /**

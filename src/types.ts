@@ -2,6 +2,8 @@
 
 export type TelegramMethod = 'sendMessage' | 'sendPhoto' | 'sendDocument';
 
+export type PinoLevelName = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
+
 export interface TelegramInputFile {
   /** Содержимое файла (Buffer, Uint8Array или ArrayBuffer). */
   data: Buffer | Uint8Array | ArrayBuffer;
@@ -84,6 +86,9 @@ export interface TelegramTransportOptions {
   maxMessageLength?: number;
   /** Минимальный интервал между сообщениями в одном чате (мс). */
   minDelayBetweenMessages?: number;
+  /** Минимальный уровень логов для отправки (число или название уровня Pino). */
+  minLevel?: number | PinoLevelName;
+
   /** Пользовательский форматтер сообщения. */
   formatMessage?: (input: FormatMessageInput) => FormatMessageResult | Promise<FormatMessageResult>;
   /** Обработчик ошибок доставки. */
@@ -146,6 +151,7 @@ export interface NormalizedOptions {
   extraKeys?: string[];
   maxMessageLength: number;
   minDelayBetweenMessages: number;
+  minLevel: number;
   retryAttempts: number;
   retryInitialDelay: number;
   retryBackoffFactor: number;

@@ -89,6 +89,22 @@ describe('pino-telegram transport', () => {
     expect(payload.text).toContain('Time:');
   });
 
+  it('skips logs below configured minLevel', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport({ minLevel: 'error' }, recorder);
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Too low' })}\n`);
+    stream.write(`${JSON.stringify({ level: 50, msg: 'Escalated' })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    expect(recorder.requests).toHaveLength(1);
+    const payload = recorder.requests[0].payload as TelegramMessagePayload;
+    expect(payload.text).toContain('Escalated');
+  });
+
   it('includes user context with default heading', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport({}, recorder);

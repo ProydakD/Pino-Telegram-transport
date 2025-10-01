@@ -22,6 +22,24 @@ const DEFAULT_RETRY_INITIAL_DELAY = 500;
 const DEFAULT_RETRY_BACKOFF = 2;
 const DEFAULT_RETRY_MAX_DELAY = 10000;
 
+const PINO_LEVEL_VALUES = Object.freeze({
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+  silent: Number.POSITIVE_INFINITY,
+});
+
+type ConfigurationErrorCode = 'MISSING_BOT_TOKEN' | 'NO_CHAT_TARGET';
+
+function createConfigurationError(message: string, code: ConfigurationErrorCode) {
+  const error = new Error(message) as Error & { code: ConfigurationErrorCode };
+  error.code = code;
+  return error;
+}
+
 /**
  * Проверяет и нормализует опции транспорта, заполняя значения по умолчанию.
  *
@@ -35,12 +53,12 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
 
   const { botToken } = options;
   if (!botToken || typeof botToken !== 'string') {
-    throw new Error('Необходимо указать botToken');
+    throw createConfigurationError('Необходимо указать botToken', 'MISSING_BOT_TOKEN');
   }
 
   const targets = normalizeTargets(options);
   if (!targets.length) {
-    throw new Error('Не найдено ни одного целевого чата');
+    throw createConfigurationError('Не найдено ни одного целевого чата', 'NO_CHAT_TARGET');
   }
 
   const parseMode = options.parseMode ?? 'HTML';
@@ -50,6 +68,8 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     : options.contextKeys
       ? [options.contextKeys]
       : DEFAULT_CONTEXT_KEYS;
+
+  const minLevel = resolveMinLevel(options.minLevel);
 
   const retryAttempts = Math.max(1, Math.floor(options.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS));
   const retryInitialDelay = Math.max(0, options.retryInitialDelay ?? DEFAULT_RETRY_INITIAL_DELAY);
@@ -71,6 +91,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     extraKeys: options.extraKeys,
     maxMessageLength: options.maxMessageLength ?? DEFAULT_MAX_LENGTH,
     minDelayBetweenMessages: options.minDelayBetweenMessages ?? DEFAULT_MIN_DELAY,
+    minLevel,
     retryAttempts,
     retryInitialDelay,
     retryBackoffFactor,
@@ -128,6 +149,38 @@ function normalizeTarget(entry: RawChatTarget, defaultThread?: number): Telegram
     chatId,
     threadId: threadId ?? defaultThread,
   };
+}
+
+function resolveMinLevel(level: TelegramTransportOptions['minLevel']): number {
+  if (level === undefined || level === null) {
+    return 0;
+  }
+
+  if (typeof level === 'number') {
+    if (Number.isNaN(level)) {
+      throw new Error('Уровень логирования не может быть NaN');
+    }
+    if (!Number.isFinite(level)) {
+      return level > 0 ? Number.POSITIVE_INFINITY : 0;
+    }
+    return Math.max(0, level);
+  }
+
+  if (typeof level === 'string') {
+    const normalized = level.trim().toLowerCase();
+    if (!normalized) {
+      throw new Error('Уровень логирования не может быть пустой строкой');
+    }
+    if (Object.prototype.hasOwnProperty.call(PINO_LEVEL_VALUES, normalized)) {
+      return PINO_LEVEL_VALUES[normalized as keyof typeof PINO_LEVEL_VALUES];
+    }
+    const parsed = Number(normalized);
+    if (!Number.isNaN(parsed)) {
+      return Math.max(0, parsed);
+    }
+  }
+
+  throw new Error('Неизвестный уровень логирования: ' + String(level));
 }
 
 /**

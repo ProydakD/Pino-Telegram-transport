@@ -8,6 +8,7 @@
 
 - Отправляй сообщения в несколько чатов и тем с сохранением порядка.
 - Соблюдай лимиты Telegram, управляя задержками и повторами доставки.
+- Ограничивай отправку по порогу уровня через `minLevel`.
 - Форматируй сообщения встроенным HTML-форматтером или собственным.
 - Отправляй текст, фото или документы в рамках одного транспорта.
 - Переопределяй метод отправки функцией `send` для тестов или кастомных клиентов.
@@ -36,6 +37,7 @@ const logger = pino({
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
       chatId: process.env.TELEGRAM_CHAT_ID,
       threadId: process.env.TELEGRAM_THREAD_ID,
+      minLevel: 'warn',
       minDelayBetweenMessages: 200,
       retryAttempts: 3,
     },

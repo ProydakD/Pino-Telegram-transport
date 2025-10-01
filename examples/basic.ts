@@ -1,4 +1,5 @@
 import pino from 'pino';
+import 'dotenv/config';
 
 async function main() {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -27,6 +28,7 @@ async function main() {
         minDelayBetweenMessages: 100,
         includeContext: true,
         includeExtras: false,
+        minLevel: 'error',
       },
     },
     level: 'trace',

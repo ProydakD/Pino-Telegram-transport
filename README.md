@@ -8,6 +8,7 @@ A transport for [Pino](https://github.com/pinojs/pino) that forwards structured 
 
 - Deliver messages to multiple chats and topics while keeping the original order.
 - Stay within Telegram limits with configurable delays and retry policies.
+- Drop low-severity records with a configurable minLevel.
 - Format outgoing messages with the built-in HTML formatter or a custom one.
 - Send text, photos, or documents with a single transport.
 - Override the delivery method with a custom `send` function for tests or alternative clients.
@@ -36,6 +37,7 @@ const logger = pino({
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
       chatId: process.env.TELEGRAM_CHAT_ID,
       threadId: process.env.TELEGRAM_THREAD_ID,
+      minLevel: 'warn',
       minDelayBetweenMessages: 200,
       retryAttempts: 3,
     },

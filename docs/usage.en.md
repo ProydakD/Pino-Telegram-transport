@@ -227,6 +227,7 @@ const app = fastify({
 ```
 
 - Provide `baseOptions` to control Fastify log level and formatters.
+- Or set the threshold directly with the transport `minLevel` option.
 - Turn off the built-in Fastify transport if you already configured one to avoid duplicate deliveries.
 
 ### AWS Lambda
