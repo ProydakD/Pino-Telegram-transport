@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.5.1...v1.6.0) (2025-10-01)
+
+
+### Features
+
+* **фильтрация логов:** добавлена возможность ограничения логов по уровню через `minLevel` ([92a3279](https://github.com/ProydakD/pino-telegram-transport/commit/92a32793ebcc15ac5412b17299f72a5e5b2c3f25))
+
 ### [1.5.1](https://github.com/ProydakD/pino-telegram-transport/compare/v1.5.0...v1.5.1) (2025-09-19)
 
 ### Documentation
