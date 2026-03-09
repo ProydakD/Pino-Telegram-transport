@@ -1,10 +1,7 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
-
-vi.mock('undici', () => ({
-  fetch: (...args: unknown[]) => fetchMock(...args),
-}));
+const originalFetch = globalThis.fetch;
 
 import { runCli } from '../src/cli';
 
@@ -42,8 +39,13 @@ function createResponse(payload: unknown, status = 200): Response {
   });
 }
 
+beforeEach(() => {
+  globalThis.fetch = ((...args: Parameters<typeof fetch>) => fetchMock(...args)) as typeof fetch;
+});
+
 afterEach(() => {
   fetchMock.mockReset();
+  globalThis.fetch = originalFetch;
 });
 
 describe('CLI утилита', () => {
@@ -117,6 +119,7 @@ describe('CLI утилита', () => {
     expect(exitCode).toBe(0);
     expect(stdoutMessages.join('\n')).toContain('TELEGRAM_CHAT_ID=-100,-200');
   });
+
   it('проверяет тему форума', async () => {
     fetchMock.mockResolvedValueOnce(
       createResponse({

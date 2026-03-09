@@ -1,4 +1,3 @@
-import { fetch, FormData } from 'undici';
 import { buildTelegramUrl } from './utils';
 import {
   NormalizedOptions,
@@ -7,8 +6,7 @@ import {
   TelegramSendPayload,
 } from './types';
 
-type FetchBody =
-  Exclude<Parameters<typeof fetch>[1], undefined> extends { body?: infer T } ? T : never;
+type FetchBody = Exclude<RequestInit['body'], null | undefined>;
 
 interface SerializedBuffer {
   type: 'Buffer';

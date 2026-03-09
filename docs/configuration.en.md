@@ -51,7 +51,7 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 
 ## Client Behaviour
 
-- The HTTP client relies on `fetch` from `undici` and sends `POST` requests.
+- The HTTP client uses Node.js built-in `fetch`, `FormData`, and `Blob` APIs and sends `POST` requests.
 - Responses `429` and `5xx` trigger exponential retry logic.
 - Telegram `retry_after` hints are honoured as the minimum delay before the next attempt.
 - A custom `send` function receives `(payload, method)` and may implement any delivery strategy.

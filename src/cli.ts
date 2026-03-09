@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
-import { fetch } from 'undici';
 import { buildTelegramUrl } from './utils';
 
 interface CliContext {
@@ -532,7 +531,7 @@ async function callTelegram<T>(
   params?: Record<string, unknown>,
 ): Promise<T> {
   const url = buildTelegramMethodUrl(token, method, params);
-  let response: Awaited<ReturnType<typeof fetch>>;
+  let response: Response;
   try {
     response = await fetch(url);
   } catch (error) {
