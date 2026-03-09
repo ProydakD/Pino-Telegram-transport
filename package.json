@@ -30,9 +30,6 @@
   "author": "Dmitriy Proydak <proydak@gmail.com>",
   "license": "MIT",
   "type": "commonjs",
-  "dependencies": {
-    "pino-abstract-transport": "^2.0.0"
-  },
   "peerDependencies": {
     "pino": "^9.0.0 || ^10.0.0"
   },
