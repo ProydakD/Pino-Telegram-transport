@@ -214,6 +214,34 @@ describe('pino-telegram transport', () => {
     warn.mockRestore();
   });
 
+  it('throws on missing botToken when failOnInitError enabled', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(() =>
+      telegramTransport({
+        chatId: 111,
+        failOnInitError: true,
+      } as unknown as TelegramTransportOptions),
+    ).toThrow('botToken');
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('throws on missing chat when failOnInitError enabled', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(() =>
+      telegramTransport({
+        botToken: TOKEN,
+        failOnInitError: true,
+      } as unknown as TelegramTransportOptions),
+    ).toThrow('целевого чата');
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('includes extras block when additional fields present', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport({}, recorder);

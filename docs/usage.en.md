@@ -61,6 +61,7 @@ const logger = pino({}, stream);
 Use direct creation whenever you need callbacks such as `formatMessage`, `send`, or `onDeliveryError`.
 
 > ℹ️ If `botToken` or `chatId` are missing, the transport falls back to a no-op mode and prints a warning.
+> ℹ️ Use `failOnInitError: true` when you need strict startup behaviour and want configuration errors to throw immediately.
 
 ## Passing custom context
 

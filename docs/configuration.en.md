@@ -21,6 +21,7 @@ English version · [Русская версия](configuration.ru.md)
 | `minLevel`                | `number \| 'trace' \| 'debug' \| 'info' \| 'warn' \| 'error' \| 'fatal' \| 'silent'` | `0`                                                                      | Skips records below the threshold. Accepts numeric values and standard Pino level names. |
 | `maxQueueSize`            | `number`                                                                             | `1000`                                                                   | Maximum number of pending tasks in the in-memory delivery queue. Minimum value is `1`.   |
 | `overflowStrategy`        | `'dropOldest' \| 'dropNewest' \| 'block'`                                            | `'dropOldest'`                                                           | Queue overflow behaviour: replace the oldest task, drop the new one, or wait for space.  |
+| `failOnInitError`         | `boolean`                                                                            | `false`                                                                  | Throws configuration errors (`botToken`, `chatId`) instead of falling back to a noop transport. |
 | `retryAttempts`           | `number`                                                                             | `3`                                                                      | Total number of delivery attempts, including the first one.                              |
 | `retryInitialDelay`       | `number`                                                                             | `500`                                                                    | Initial delay (ms) before retrying.                                                      |
 | `retryBackoffFactor`      | `number`                                                                             | `2`                                                                      | Exponential backoff multiplier.                                                          |
@@ -58,6 +59,7 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 - Slow requests are aborted after `requestTimeoutMs` milliseconds (`10000` by default).
 - The in-memory delivery queue is capped by `maxQueueSize` (`1000` tasks by default).
 - Queue overflow follows `overflowStrategy`: `dropOldest`, `dropNewest`, or `block`.
+- Configuration errors disable the transport and print a warning by default; `failOnInitError: true` switches this behaviour to throwing.
 - Responses `429` and `5xx` trigger exponential retry logic.
 - Built-in client timeouts are treated as temporary failures and are retried as well.
 - Telegram `retry_after` hints are honoured as the minimum delay before the next attempt.

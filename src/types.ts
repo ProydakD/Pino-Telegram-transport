@@ -93,6 +93,8 @@ export interface TelegramTransportOptions {
   maxQueueSize?: number;
   /** Поведение при переполнении внутренней очереди доставки. */
   overflowStrategy?: TelegramQueueOverflowStrategy;
+  /** Пробрасывать ли ошибки конфигурации вместо fallback в noop-транспорт. */
+  failOnInitError?: boolean;
 
   /** Пользовательский форматтер сообщения. */
   formatMessage?: (input: FormatMessageInput) => FormatMessageResult | Promise<FormatMessageResult>;
