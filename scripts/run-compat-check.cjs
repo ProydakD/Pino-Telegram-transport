@@ -193,10 +193,16 @@ async function main() {
   logger.info('compat target smoke');
 
   if (typeof logger.flush === 'function') {
-    await logger.flush();
+    await new Promise((resolve, reject) => {
+      logger.flush((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
   }
-
-  await new Promise((resolve) => setTimeout(resolve, 25));
 }
 
 main().catch((error) => {
@@ -232,10 +238,16 @@ async function main() {
   logger.info({ context: { requestId: 'compat' } }, 'compat direct smoke');
 
   if (typeof logger.flush === 'function') {
-    await logger.flush();
+    await new Promise((resolve, reject) => {
+      logger.flush((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
   }
-
-  await new Promise((resolve) => setTimeout(resolve, 25));
 
   if (callCount !== 1) {
     throw new Error(\`Ожидалась одна отправка через direct-stream, получено \${callCount}.\`);

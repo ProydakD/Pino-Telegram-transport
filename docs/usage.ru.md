@@ -238,7 +238,7 @@ export const handler = async (event: unknown) => {
 ```
 
 - Используйте вторым аргументом любые опции `pino`, например `messageKey` или `base`.
-- Добавьте `await logger.flush?.()` перед завершением функции, если используете асинхронные обработчики.
+- Перед завершением функции дождитесь `logger.flush(callback)`, например через `await new Promise((resolve, reject) => logger.flush?.((error) => (error ? reject(error) : resolve(undefined))));`.
 
 ## Логирование ошибок
 
@@ -247,4 +247,4 @@ export const handler = async (event: unknown) => {
 
 ## Завершение работы
 
-Вызовите `await logger.flush?.()` или добавьте задержку перед остановкой процесса, чтобы дождаться доставки последних сообщений.
+Перед остановкой процесса дождитесь `logger.flush(callback)`; искусственная задержка больше не требуется.

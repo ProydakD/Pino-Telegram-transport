@@ -238,7 +238,7 @@ export const handler = async (event: unknown) => {
 ```
 
 - Use the second argument for any `pino` options, such as `messageKey` or `base`.
-- Call `await logger.flush?.()` before Lambda exits when you rely on asynchronous handlers.
+- Before Lambda exits, wait for `logger.flush(callback)`, for example via `await new Promise((resolve, reject) => logger.flush?.((error) => (error ? reject(error) : resolve(undefined))));`.
 
 ## Error logging
 
@@ -247,4 +247,4 @@ export const handler = async (event: unknown) => {
 
 ## Graceful shutdown
 
-Call `await logger.flush?.()` or add a short delay before terminating the process to ensure the last messages are delivered.
+Before terminating the process, wait for `logger.flush(callback)`; an artificial delay is no longer required.

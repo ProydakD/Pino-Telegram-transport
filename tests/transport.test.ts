@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import pino from 'pino';
 import telegramTransport, { TelegramDeliveryError, createMediaFormatter } from '../src';
 import {
   TelegramDocumentPayload,
@@ -22,6 +23,10 @@ interface Recorder {
   requests: RecordedRequest[];
   send: (payload: TelegramSendPayload, method: TelegramMethod) => Promise<void>;
   timestamps: number[];
+}
+
+interface FlushableLogger {
+  flush: (callback?: (error?: Error) => void) => void;
 }
 
 function createRecorder(): Recorder {
@@ -86,6 +91,24 @@ async function flush(ms = 10) {
   } else {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
+}
+
+async function flushMicrotasks(iterations = 5): Promise<void> {
+  for (let index = 0; index < iterations; index += 1) {
+    await Promise.resolve();
+  }
+}
+
+async function flushLogger(logger: FlushableLogger): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    logger.flush((error?: Error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 function expectSingleRequest(recorder: Recorder): RecordedRequest {
@@ -342,7 +365,9 @@ describe('pino-telegram transport', () => {
     });
     const document = payload.document as TelegramInputFile;
     expect(document.data).toBeInstanceOf(Uint8Array);
-    expect(Array.from(document.data)).toEqual(Array.from(Buffer.from('hello world', 'utf8')));
+    const documentData =
+      document.data instanceof Uint8Array ? document.data : new Uint8Array(document.data);
+    expect(Array.from(documentData)).toEqual(Array.from(Buffer.from('hello world', 'utf8')));
   });
   it('использует createMediaFormatter с кастомными ключами', async () => {
     const recorder = createRecorder();
@@ -384,7 +409,8 @@ describe('pino-telegram transport', () => {
     });
     const photo = payload.photo as TelegramInputFile;
     expect(photo.data).toBeInstanceOf(Uint8Array);
-    expect(Array.from(photo.data)).toEqual(Array.from(Buffer.from('sample image data')));
+    const photoData = photo.data instanceof Uint8Array ? photo.data : new Uint8Array(photo.data);
+    expect(Array.from(photoData)).toEqual(Array.from(Buffer.from('sample image data')));
     expect(payload.caption).toBe('ABCDEFG...');
     expect(payload.caption).toHaveLength(10);
     expect(recorder.requests[0].method).toBe('sendPhoto');
@@ -768,5 +794,173 @@ describe('pino-telegram transport', () => {
     const [, payload, method] = onDeliveryError.mock.calls[0];
     expect(method).toBe('sendMessage');
     expect((payload as TelegramMessagePayload).text).toContain('Fail fast');
+  });
+
+  it('flush дожидается отправки одного сообщения в direct-stream', async () => {
+    let releaseSend: (() => void) | undefined;
+    const recorder = createRecorder();
+    const send = vi.fn(
+      (payload: TelegramSendPayload, method: TelegramMethod) =>
+        new Promise<void>((resolve) => {
+          releaseSend = async () => {
+            await recorder.send(payload, method);
+            resolve();
+          };
+        }),
+    );
+    const stream = telegramTransport({
+      botToken: TOKEN,
+      chatId: 111,
+      send,
+    });
+    const logger = pino({}, stream);
+
+    logger.info('Flush one');
+
+    let flushed = false;
+    const flushPromise = flushLogger(logger).then(() => {
+      flushed = true;
+    });
+
+    await flushMicrotasks();
+    expect(flushed).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    await releaseSend?.();
+    await flushPromise;
+
+    expect(flushed).toBe(true);
+    expect(recorder.requests).toHaveLength(1);
+    stream.end();
+  });
+
+  it('flush дожидается нескольких сообщений в direct-stream', async () => {
+    const pendingSends: Array<() => Promise<void>> = [];
+    const recorder = createRecorder();
+    const send = vi.fn(
+      (payload: TelegramSendPayload, method: TelegramMethod) =>
+        new Promise<void>((resolve) => {
+          pendingSends.push(async () => {
+            await recorder.send(payload, method);
+            resolve();
+          });
+        }),
+    );
+    const stream = telegramTransport({
+      botToken: TOKEN,
+      chatId: 111,
+      send,
+    });
+    const logger = pino({}, stream);
+
+    logger.info('Flush first');
+    logger.info('Flush second');
+
+    let flushed = false;
+    const flushPromise = flushLogger(logger).then(() => {
+      flushed = true;
+    });
+
+    await flushMicrotasks();
+    expect(flushed).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    await pendingSends.shift()?.();
+    await vi.waitFor(() => {
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    expect(flushed).toBe(false);
+    expect(send).toHaveBeenCalledTimes(2);
+
+    await pendingSends.shift()?.();
+    await flushPromise;
+
+    expect(flushed).toBe(true);
+    expect(recorder.requests).toHaveLength(2);
+    stream.end();
+  });
+
+  it('flush дожидается обработки ошибки доставки в direct-stream', async () => {
+    let rejectSend: ((error: Error) => void) | undefined;
+    const onDeliveryError = vi.fn();
+    const send = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSend = reject;
+        }),
+    );
+    const stream = telegramTransport({
+      botToken: TOKEN,
+      chatId: 111,
+      onDeliveryError,
+      retryAttempts: 1,
+      send,
+    });
+    const logger = pino({}, stream);
+
+    logger.info('Flush error');
+
+    let flushed = false;
+    const flushPromise = flushLogger(logger).then(() => {
+      flushed = true;
+    });
+
+    await flushMicrotasks();
+    expect(flushed).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    rejectSend?.(new TelegramDeliveryError('Delivery failed', { ok: false, error_code: 400 }, 400));
+    await flushPromise;
+
+    expect(flushed).toBe(true);
+    expect(onDeliveryError).toHaveBeenCalledTimes(1);
+    stream.end();
+  });
+
+  it('flush дожидается retry-сценария в direct-stream', async () => {
+    const recorder = createRecorder();
+    const originalSend = recorder.send;
+    let attempts = 0;
+
+    const stream = telegramTransport({
+      botToken: TOKEN,
+      chatId: 111,
+      minDelayBetweenMessages: 0,
+      retryAttempts: 3,
+      retryInitialDelay: 20,
+      retryBackoffFactor: 2,
+      send: vi.fn(async (payload, method) => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new TelegramDeliveryError('Retry later', { ok: false, error_code: 500 }, 500);
+        }
+        await originalSend(payload, method);
+      }),
+    });
+    const logger = pino({}, stream);
+
+    logger.info('Flush retry');
+
+    let flushed = false;
+    const flushPromise = flushLogger(logger).then(() => {
+      flushed = true;
+    });
+
+    await flushMicrotasks();
+    expect(attempts).toBe(1);
+    expect(flushed).toBe(false);
+
+    await flush(25);
+    expect(attempts).toBe(2);
+    expect(flushed).toBe(false);
+
+    await flush(45);
+    await flushPromise;
+
+    expect(flushed).toBe(true);
+    expect(attempts).toBe(3);
+    expect(recorder.requests).toHaveLength(1);
+    stream.end();
   });
 });

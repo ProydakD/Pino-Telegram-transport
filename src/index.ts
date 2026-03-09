@@ -1,4 +1,5 @@
-import build from 'pino-abstract-transport';
+import { StringDecoder } from 'node:string_decoder';
+import { Writable } from 'node:stream';
 import { buildMessage } from './formatter';
 import { RateLimiter, TaskQueue } from './rate-limiter';
 import { normalizeOptions } from './utils';
@@ -41,6 +42,16 @@ export {
 } from './adapters';
 export type { NestLoggerOptions, NestLoggerOverrides, FastifyLoggerOptions } from './adapters';
 
+interface FlushCallback {
+  (error?: Error): void;
+}
+
+interface FlushableTransportStream extends Writable {
+  flush: (callback?: FlushCallback) => void;
+}
+
+const TRANSPORT_HIGH_WATER_MARK = 1;
+
 /**
  * Создаёт потоковый транспорт для Pino и настраивает внутренние зависимости.
  * Транспорт нормализует конфигурацию, инициализирует очередь и ограничитель частоты
@@ -74,40 +85,121 @@ export default function telegramTransport(options: TelegramTransportOptions) {
   const rateLimiter = new RateLimiter();
   const queue = new TaskQueue();
 
-  const stream = build((source) => {
-    source.on('unknown', (line: string) => {
-      handleError(new Error(`Не удалось разобрать строку: ${line}`));
-    });
+  const decoder = new StringDecoder('utf8');
+  let pendingText = '';
+  let activeWrites = 0;
 
-    source.on('data', (chunk: unknown) => {
-      const log = parseLog(chunk);
-      if (!log) {
-        return;
-      }
-      if (!shouldProcessLog(log)) {
-        return;
-      }
-
-      queue
-        .push(async () => {
-          await processLog(log);
+  const stream = new Writable({
+    highWaterMark: TRANSPORT_HIGH_WATER_MARK,
+    write(chunk, _encoding, callback) {
+      activeWrites += 1;
+      void consumeChunk(chunk, false)
+        .then(() => {
+          activeWrites -= 1;
+          callback();
         })
         .catch((error) => {
+          activeWrites -= 1;
           handleError(error);
+          callback();
         });
-    });
+    },
+    final(callback) {
+      activeWrites += 1;
+      void consumeChunk(Buffer.alloc(0), true)
+        .then(() => queue.onIdle())
+        .then(() => {
+          activeWrites -= 1;
+          callback();
+        })
+        .catch((error) => {
+          activeWrites -= 1;
+          handleError(error);
+          callback();
+        });
+    },
+  }) as FlushableTransportStream;
 
-    const finalize = () => {
-      queue.onIdle().catch(() => {
-        // Игнорируем ошибки завершения очереди, чтобы не блокировать поток.
+  stream.flush = (callback?: FlushCallback) => {
+    void waitForTransportIdle()
+      .then(() => {
+        if (callback) {
+          process.nextTick(callback);
+        }
+      })
+      .catch((error) => {
+        if (callback) {
+          process.nextTick(callback, error as Error);
+        }
       });
-    };
-
-    source.on('end', finalize);
-    source.on('close', finalize);
-  });
+  };
 
   return stream;
+
+  async function consumeChunk(chunk: string | Buffer, flushRemainder: boolean): Promise<void> {
+    pendingText += typeof chunk === 'string' ? chunk : decoder.write(chunk);
+
+    if (flushRemainder) {
+      pendingText += decoder.end();
+    }
+
+    const lines = extractLines(flushRemainder);
+    for (const line of lines) {
+      await processLine(line);
+    }
+  }
+
+  function extractLines(flushRemainder: boolean): string[] {
+    const lines: string[] = [];
+    let newlineIndex = pendingText.indexOf('\n');
+
+    while (newlineIndex >= 0) {
+      lines.push(trimTrailingCarriageReturn(pendingText.slice(0, newlineIndex)));
+      pendingText = pendingText.slice(newlineIndex + 1);
+      newlineIndex = pendingText.indexOf('\n');
+    }
+
+    if (flushRemainder && pendingText.length > 0) {
+      lines.push(trimTrailingCarriageReturn(pendingText));
+      pendingText = '';
+    }
+
+    return lines;
+  }
+
+  async function processLine(line: string): Promise<void> {
+    if (line.length === 0) {
+      return;
+    }
+
+    const log = parseLog(line);
+    if (!log) {
+      return;
+    }
+    if (!shouldProcessLog(log)) {
+      return;
+    }
+
+    try {
+      await queue.push(async () => {
+        await processLog(log);
+      });
+    } catch (error) {
+      handleError(error);
+    }
+  }
+
+  async function waitForTransportIdle(): Promise<void> {
+    while (activeWrites > 0 || stream.writableLength > 0 || stream.writableNeedDrain) {
+      await waitForNextTurn();
+    }
+
+    await queue.onIdle();
+
+    if (activeWrites > 0 || stream.writableLength > 0 || stream.writableNeedDrain) {
+      await waitForTransportIdle();
+    }
+  }
 
   /**
    * Формирует Telegram-запрос из записи Pino и отправляет его всем настроенным чатам.
@@ -135,7 +227,7 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
   }
   function shouldProcessLog(log: PinoLog): boolean {
-    if (typeof log.level !== 'number') {
+    if (!Number.isFinite(log.level)) {
       return true;
     }
     return log.level >= normalized.minLevel;
@@ -366,10 +458,19 @@ function defaultContentType(field: 'photo' | 'document'): string {
  * @returns Поток, совместимый с pino, который не выполняет никаких действий.
  */
 function createNoopStream() {
-  return build((source) => {
-    source.on('data', () => {});
-    source.on('unknown', () => {});
-  });
+  const stream = new Writable({
+    write(_chunk, _encoding, callback) {
+      callback();
+    },
+  }) as FlushableTransportStream;
+
+  stream.flush = (callback?: FlushCallback) => {
+    if (callback) {
+      process.nextTick(callback);
+    }
+  };
+
+  return stream;
 }
 
 /**
@@ -407,4 +508,14 @@ function parseLog(chunk: unknown): PinoLog | null {
  */
 function getTargetKey(chatId: TelegramMessagePayload['chat_id']): string {
   return String(chatId);
+}
+
+function trimTrailingCarriageReturn(line: string): string {
+  return line.endsWith('\r') ? line.slice(0, -1) : line;
+}
+
+function waitForNextTurn(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
 }
