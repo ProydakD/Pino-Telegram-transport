@@ -1,6 +1,7 @@
 ﻿export type ChatIdentifier = string | number;
 
 export type TelegramMethod = 'sendMessage' | 'sendPhoto' | 'sendDocument';
+export type TelegramQueueOverflowStrategy = 'dropOldest' | 'dropNewest' | 'block';
 
 export type PinoLevelName = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
 
@@ -88,6 +89,10 @@ export interface TelegramTransportOptions {
   minDelayBetweenMessages?: number;
   /** Минимальный уровень логов для отправки (число или название уровня Pino). */
   minLevel?: number | PinoLevelName;
+  /** Максимальное количество ожидающих задач во внутренней очереди доставки. */
+  maxQueueSize?: number;
+  /** Поведение при переполнении внутренней очереди доставки. */
+  overflowStrategy?: TelegramQueueOverflowStrategy;
 
   /** Пользовательский форматтер сообщения. */
   formatMessage?: (input: FormatMessageInput) => FormatMessageResult | Promise<FormatMessageResult>;
@@ -154,6 +159,8 @@ export interface NormalizedOptions {
   maxMessageLength: number;
   minDelayBetweenMessages: number;
   minLevel: number;
+  maxQueueSize: number;
+  overflowStrategy: TelegramQueueOverflowStrategy;
   retryAttempts: number;
   retryInitialDelay: number;
   retryBackoffFactor: number;

@@ -113,6 +113,28 @@ const logger = pino({
 
 См. `examples/retry.ts` для сценария с явным транспортом.
 
+## Ограничение очереди доставки
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      maxQueueSize: 500,
+      overflowStrategy: 'block',
+    },
+  },
+});
+```
+
+- `maxQueueSize` ограничивает количество ожидающих задач во внутренней очереди.
+- `overflowStrategy: 'dropOldest'` заменяет самую старую ожидающую запись.
+- `overflowStrategy: 'dropNewest'` отбрасывает новую запись.
+- `overflowStrategy: 'block'` ждёт освобождения места и замедляет приём новых логов вместо дропа.
+- Отброшенные записи попадают в `onDeliveryError` как обычные ошибки доставки.
+
 ## Пользовательский форматтер
 
 ```ts

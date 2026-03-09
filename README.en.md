@@ -8,6 +8,7 @@ A transport for [Pino](https://github.com/pinojs/pino) that forwards structured 
 
 - Deliver messages to multiple chats and topics while keeping the original order.
 - Stay within Telegram limits with configurable delays and retry policies.
+- Bound the in-memory delivery queue and choose an overflow strategy.
 - Drop low-severity records with a configurable minLevel.
 - Format outgoing messages with the built-in HTML formatter or a custom one.
 - Send text, photos, or documents with a single transport.

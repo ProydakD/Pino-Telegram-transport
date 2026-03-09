@@ -58,6 +58,27 @@ function createTransport(custom?: Partial<TelegramTransportOptions>, recorder?: 
   return { stream, recorder: rec };
 }
 
+function createControlledSend(recorder: Recorder) {
+  const pendingSends: Array<() => Promise<void>> = [];
+  const send = vi.fn(
+    (payload: TelegramSendPayload, method: TelegramMethod) =>
+      new Promise<void>((resolve) => {
+        pendingSends.push(async () => {
+          await recorder.send(payload, method);
+          resolve();
+        });
+      }),
+  );
+
+  return {
+    send,
+    async releaseNext(): Promise<void> {
+      const nextSend = pendingSends.shift();
+      await nextSend?.();
+    },
+  };
+}
+
 function createTelegramResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
@@ -585,6 +606,144 @@ describe('pino-telegram transport', () => {
 
     expect(recorder.requests).toHaveLength(2);
     expect(recorder.timestamps[1] - recorder.timestamps[0]).toBeGreaterThanOrEqual(200);
+  });
+
+  it('drops the oldest queued log when overflowStrategy=dropOldest', async () => {
+    const recorder = createRecorder();
+    const controlledSend = createControlledSend(recorder);
+    const onDeliveryError = vi.fn();
+    const { stream } = createTransport(
+      {
+        send: controlledSend.send,
+        onDeliveryError,
+        minDelayBetweenMessages: 0,
+        maxQueueSize: 1,
+        overflowStrategy: 'dropOldest',
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'First queued' })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Second queued' })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Third queued' })}\n`);
+    stream.end();
+
+    await vi.waitFor(() => {
+      expect(controlledSend.send).toHaveBeenCalledTimes(1);
+      expect(onDeliveryError).toHaveBeenCalledTimes(1);
+    });
+
+    expect(onDeliveryError.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect((onDeliveryError.mock.calls[0][0] as Error).message).toContain(
+      'overflowStrategy=dropOldest',
+    );
+
+    await controlledSend.releaseNext();
+    await vi.waitFor(() => {
+      expect(controlledSend.send).toHaveBeenCalledTimes(2);
+    });
+    await controlledSend.releaseNext();
+    await flush();
+
+    expect(recorder.requests).toHaveLength(2);
+    const deliveredTexts = recorder.requests.map(
+      (request) => (request.payload as TelegramMessagePayload).text,
+    );
+    expect(deliveredTexts[0]).toContain('First queued');
+    expect(deliveredTexts[1]).toContain('Third queued');
+    expect(deliveredTexts.join('\n')).not.toContain('Second queued');
+  });
+
+  it('drops the newest log when overflowStrategy=dropNewest', async () => {
+    const recorder = createRecorder();
+    const controlledSend = createControlledSend(recorder);
+    const onDeliveryError = vi.fn();
+    const { stream } = createTransport(
+      {
+        send: controlledSend.send,
+        onDeliveryError,
+        minDelayBetweenMessages: 0,
+        maxQueueSize: 1,
+        overflowStrategy: 'dropNewest',
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'First queued' })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Second queued' })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Third queued' })}\n`);
+    stream.end();
+
+    await vi.waitFor(() => {
+      expect(controlledSend.send).toHaveBeenCalledTimes(1);
+      expect(onDeliveryError).toHaveBeenCalledTimes(1);
+    });
+
+    expect((onDeliveryError.mock.calls[0][0] as Error).message).toContain(
+      'overflowStrategy=dropNewest',
+    );
+
+    await controlledSend.releaseNext();
+    await vi.waitFor(() => {
+      expect(controlledSend.send).toHaveBeenCalledTimes(2);
+    });
+    await controlledSend.releaseNext();
+    await flush();
+
+    expect(recorder.requests).toHaveLength(2);
+    const deliveredTexts = recorder.requests.map(
+      (request) => (request.payload as TelegramMessagePayload).text,
+    );
+    expect(deliveredTexts[0]).toContain('First queued');
+    expect(deliveredTexts[1]).toContain('Second queued');
+    expect(deliveredTexts.join('\n')).not.toContain('Third queued');
+  });
+
+  it('waits for free queue space when overflowStrategy=block', async () => {
+    const recorder = createRecorder();
+    const controlledSend = createControlledSend(recorder);
+    const onDeliveryError = vi.fn();
+    const { stream } = createTransport(
+      {
+        send: controlledSend.send,
+        onDeliveryError,
+        minDelayBetweenMessages: 0,
+        maxQueueSize: 1,
+        overflowStrategy: 'block',
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'First queued' })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Second queued' })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Third queued' })}\n`);
+    stream.end();
+
+    await vi.waitFor(() => {
+      expect(controlledSend.send).toHaveBeenCalledTimes(1);
+    });
+
+    await controlledSend.releaseNext();
+    await vi.waitFor(() => {
+      expect(controlledSend.send).toHaveBeenCalledTimes(2);
+    });
+    expect(controlledSend.send).not.toHaveBeenCalledTimes(3);
+
+    await controlledSend.releaseNext();
+    await vi.waitFor(() => {
+      expect(controlledSend.send).toHaveBeenCalledTimes(3);
+    });
+    await controlledSend.releaseNext();
+    await flush();
+
+    expect(onDeliveryError).not.toHaveBeenCalled();
+    expect(recorder.requests).toHaveLength(3);
+    const deliveredTexts = recorder.requests.map(
+      (request) => (request.payload as TelegramMessagePayload).text,
+    );
+    expect(deliveredTexts[0]).toContain('First queued');
+    expect(deliveredTexts[1]).toContain('Second queued');
+    expect(deliveredTexts[2]).toContain('Third queued');
   });
 
   it('retries on 429 responses with retry_after hint', async () => {

@@ -16,6 +16,7 @@ import {
   TelegramRequest,
   TelegramSendPayload,
   TelegramInputFile,
+  TelegramQueueOverflowStrategy,
   TelegramTransportOptions,
 } from './types';
 import { TelegramClient, TelegramDeliveryError } from './telegram-client';
@@ -32,6 +33,7 @@ export type {
   TelegramInputFile,
   TelegramBasePayload,
   TelegramMethod,
+  TelegramQueueOverflowStrategy,
 };
 export { TelegramDeliveryError } from './telegram-client';
 export { createMediaFormatter } from './presets';
@@ -83,7 +85,10 @@ export default function telegramTransport(options: TelegramTransportOptions) {
 
   const client = new TelegramClient(normalized);
   const rateLimiter = new RateLimiter();
-  const queue = new TaskQueue();
+  const queue = new TaskQueue({
+    maxSize: normalized.maxQueueSize,
+    overflowStrategy: normalized.overflowStrategy,
+  });
 
   const decoder = new StringDecoder('utf8');
   let pendingText = '';
@@ -180,13 +185,15 @@ export default function telegramTransport(options: TelegramTransportOptions) {
       return;
     }
 
-    try {
-      await queue.push(async () => {
-        await processLog(log);
-      });
-    } catch (error) {
+    const queuedTask = queue.push(async () => {
+      await processLog(log);
+    });
+
+    void queuedTask.done.catch((error) => {
       handleError(error);
-    }
+    });
+
+    await queuedTask.ready;
   }
 
   async function waitForTransportIdle(): Promise<void> {

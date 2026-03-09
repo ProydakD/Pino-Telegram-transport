@@ -113,6 +113,28 @@ const logger = pino({
 
 See `examples/retry.ts` for an explicit transport scenario.
 
+## Bounding the delivery queue
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      maxQueueSize: 500,
+      overflowStrategy: 'block',
+    },
+  },
+});
+```
+
+- `maxQueueSize` caps the number of pending tasks in the in-memory queue.
+- `overflowStrategy: 'dropOldest'` replaces the oldest pending record.
+- `overflowStrategy: 'dropNewest'` discards the new record.
+- `overflowStrategy: 'block'` waits for free space and slows intake instead of dropping logs.
+- Dropped records are reported through `onDeliveryError` just like delivery failures.
+
 ## Custom formatter
 
 ```ts

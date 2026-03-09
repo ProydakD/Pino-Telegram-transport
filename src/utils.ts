@@ -2,6 +2,7 @@
   NormalizedOptions,
   RawChatTarget,
   TelegramChatTarget,
+  TelegramQueueOverflowStrategy,
   TelegramTransportOptions,
 } from './types';
 import { createMediaFormatter } from './presets';
@@ -22,6 +23,8 @@ const DEFAULT_RETRY_INITIAL_DELAY = 500;
 const DEFAULT_RETRY_BACKOFF = 2;
 const DEFAULT_RETRY_MAX_DELAY = 10000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
+const DEFAULT_MAX_QUEUE_SIZE = 1000;
+const DEFAULT_OVERFLOW_STRATEGY: TelegramQueueOverflowStrategy = 'dropOldest';
 
 const PINO_LEVEL_VALUES = Object.freeze({
   trace: 10,
@@ -80,6 +83,8 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     options.retryMaxDelay ?? DEFAULT_RETRY_MAX_DELAY,
   );
   const requestTimeoutMs = normalizeRequestTimeoutMs(options.requestTimeoutMs);
+  const maxQueueSize = normalizeMaxQueueSize(options.maxQueueSize);
+  const overflowStrategy = normalizeOverflowStrategy(options.overflowStrategy);
 
   return {
     botToken,
@@ -94,6 +99,8 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     maxMessageLength: options.maxMessageLength ?? DEFAULT_MAX_LENGTH,
     minDelayBetweenMessages: options.minDelayBetweenMessages ?? DEFAULT_MIN_DELAY,
     minLevel,
+    maxQueueSize,
+    overflowStrategy,
     retryAttempts,
     retryInitialDelay,
     retryBackoffFactor,
@@ -216,6 +223,31 @@ function normalizeRequestTimeoutMs(value: TelegramTransportOptions['requestTimeo
     return 0;
   }
   return Math.max(0, Math.trunc(value));
+}
+
+function normalizeMaxQueueSize(value: TelegramTransportOptions['maxQueueSize']): number {
+  if (value === undefined || value === null) {
+    return DEFAULT_MAX_QUEUE_SIZE;
+  }
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    throw new Error('maxQueueSize должен быть числом');
+  }
+  if (!Number.isFinite(value)) {
+    throw new Error('maxQueueSize должен быть конечным числом');
+  }
+  return Math.max(1, Math.trunc(value));
+}
+
+function normalizeOverflowStrategy(
+  value: TelegramTransportOptions['overflowStrategy'],
+): TelegramQueueOverflowStrategy {
+  if (value === undefined || value === null) {
+    return DEFAULT_OVERFLOW_STRATEGY;
+  }
+  if (value === 'dropOldest' || value === 'dropNewest' || value === 'block') {
+    return value;
+  }
+  throw new Error('Неизвестная стратегия переполнения очереди: ' + String(value));
 }
 
 /**

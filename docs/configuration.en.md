@@ -19,6 +19,8 @@ English version · [Русская версия](configuration.ru.md)
 | `maxMessageLength`        | `number`                                                                             | `4096`                                                                   | Maximum text length. Remember the 1024-character caption limit for media.                |
 | `minDelayBetweenMessages` | `number`                                                                             | `100`                                                                    | Minimum delay (ms) between messages for the same chat.                                   |
 | `minLevel`                | `number \| 'trace' \| 'debug' \| 'info' \| 'warn' \| 'error' \| 'fatal' \| 'silent'` | `0`                                                                      | Skips records below the threshold. Accepts numeric values and standard Pino level names. |
+| `maxQueueSize`            | `number`                                                                             | `1000`                                                                   | Maximum number of pending tasks in the in-memory delivery queue. Minimum value is `1`.   |
+| `overflowStrategy`        | `'dropOldest' \| 'dropNewest' \| 'block'`                                            | `'dropOldest'`                                                           | Queue overflow behaviour: replace the oldest task, drop the new one, or wait for space.  |
 | `retryAttempts`           | `number`                                                                             | `3`                                                                      | Total number of delivery attempts, including the first one.                              |
 | `retryInitialDelay`       | `number`                                                                             | `500`                                                                    | Initial delay (ms) before retrying.                                                      |
 | `retryBackoffFactor`      | `number`                                                                             | `2`                                                                      | Exponential backoff multiplier.                                                          |
@@ -54,6 +56,8 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 
 - The HTTP client uses Node.js built-in `fetch`, `FormData`, and `Blob` APIs and sends `POST` requests.
 - Slow requests are aborted after `requestTimeoutMs` milliseconds (`10000` by default).
+- The in-memory delivery queue is capped by `maxQueueSize` (`1000` tasks by default).
+- Queue overflow follows `overflowStrategy`: `dropOldest`, `dropNewest`, or `block`.
 - Responses `429` and `5xx` trigger exponential retry logic.
 - Built-in client timeouts are treated as temporary failures and are retried as well.
 - Telegram `retry_after` hints are honoured as the minimum delay before the next attempt.
