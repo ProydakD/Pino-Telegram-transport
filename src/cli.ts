@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
-import { buildTelegramUrl } from './utils';
+import { buildTelegramUrl, createRequestTimeout } from './utils';
 
 interface CliContext {
   stdout: (message: string) => void;
@@ -45,6 +45,8 @@ interface TelegramResponse<T> {
   error_code?: number;
 }
 
+const CLI_REQUEST_TIMEOUT_MS = 10000;
+
 /**
  * Специализированное исключение CLI для сохранения HTTP-статуса и кода ошибки Telegram.
  *
@@ -59,6 +61,7 @@ class TelegramCliError extends Error {
     readonly status?: number,
     readonly errorCode?: number,
     readonly cause?: unknown,
+    readonly isTimeout = false,
   ) {
     super(message);
     this.name = 'TelegramCliError';
@@ -531,37 +534,53 @@ async function callTelegram<T>(
   params?: Record<string, unknown>,
 ): Promise<T> {
   const url = buildTelegramMethodUrl(token, method, params);
-  let response: Response;
+  const timeout = createRequestTimeout(CLI_REQUEST_TIMEOUT_MS);
+
   try {
-    response = await fetch(url);
+    const response = await fetch(url, { signal: timeout.signal });
+
+    let data: TelegramResponse<T> | undefined;
+    try {
+      data = (await response.json()) as TelegramResponse<T>;
+    } catch (error) {
+      throw new TelegramCliError(
+        `Не удалось разобрать ответ Telegram (${method})`,
+        response.status,
+        undefined,
+        error,
+      );
+    }
+
+    if (!response.ok || !data?.ok || data.result === undefined) {
+      const description = data?.description ?? response.statusText ?? 'Неизвестная ошибка';
+      throw new TelegramCliError(description, response.status, data?.error_code);
+    }
+
+    return data.result;
   } catch (error) {
+    if (timeout.didTimeout()) {
+      throw new TelegramCliError(
+        `Превышено время ожидания ответа Telegram (${method}) после ${CLI_REQUEST_TIMEOUT_MS} мс`,
+        undefined,
+        undefined,
+        error,
+        true,
+      );
+    }
+
     const reason = (error as Error | undefined)?.message ?? 'неизвестная ошибка';
+    if (error instanceof TelegramCliError) {
+      throw error;
+    }
     throw new TelegramCliError(
       `Сетевая ошибка при вызове ${method}: ${reason}`,
       undefined,
       undefined,
       error,
     );
+  } finally {
+    timeout.dispose();
   }
-
-  let data: TelegramResponse<T> | undefined;
-  try {
-    data = (await response.json()) as TelegramResponse<T>;
-  } catch (error) {
-    throw new TelegramCliError(
-      `Не удалось разобрать ответ Telegram (${method})`,
-      response.status,
-      undefined,
-      error,
-    );
-  }
-
-  if (!response.ok || !data?.ok || data.result === undefined) {
-    const description = data?.description ?? response.statusText ?? 'Неизвестная ошибка';
-    throw new TelegramCliError(description, response.status, data?.error_code);
-  }
-
-  return data.result;
 }
 
 /**

@@ -23,6 +23,7 @@ English version · [Русская версия](configuration.ru.md)
 | `retryInitialDelay`       | `number`                                                                             | `500`                                                                    | Initial delay (ms) before retrying.                                                      |
 | `retryBackoffFactor`      | `number`                                                                             | `2`                                                                      | Exponential backoff multiplier.                                                          |
 | `retryMaxDelay`           | `number`                                                                             | `10000`                                                                  | Maximum delay (ms) between attempts.                                                     |
+| `requestTimeoutMs`        | `number`                                                                             | `10000`                                                                  | HTTP timeout for Telegram requests in milliseconds. Set `0` to disable the built-in timeout. |
 | `formatMessage`           | `FormatMessageFn`                                                                    | `createMediaFormatter()`                                                 | Custom message formatter.                                                                |
 | `onDeliveryError`         | `(error, payload?, method?) => void`                                                 | —                                                                        | Delivery error handler.                                                                  |
 | `send`                    | `(payload, method) => Promise<void>`                                                 | —                                                                        | Custom delivery implementation instead of the built-in HTTP client.                      |
@@ -52,7 +53,9 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 ## Client Behaviour
 
 - The HTTP client uses Node.js built-in `fetch`, `FormData`, and `Blob` APIs and sends `POST` requests.
+- Slow requests are aborted after `requestTimeoutMs` milliseconds (`10000` by default).
 - Responses `429` and `5xx` trigger exponential retry logic.
+- Built-in client timeouts are treated as temporary failures and are retried as well.
 - Telegram `retry_after` hints are honoured as the minimum delay before the next attempt.
 - A custom `send` function receives `(payload, method)` and may implement any delivery strategy.
 

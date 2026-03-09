@@ -16,6 +16,7 @@ The bundled command line utility helps you validate Telegram credentials before 
 - Supply `--thread-id <id>` along with a single chat to confirm that a forum topic is reachable.
 - Let the CLI send a muted probe message to that topic (it deletes the message right away) to verify access.
 - Omit explicit flags if you export `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_THREAD_ID` in the environment.
+- CLI network requests time out after 10 seconds so the check cannot hang forever.
 - Expect a non-zero exit code if Telegram rejects the token, chat, or thread.
 
 ### Example

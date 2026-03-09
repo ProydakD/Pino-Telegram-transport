@@ -109,6 +109,8 @@ export interface TelegramTransportOptions {
   retryBackoffFactor?: number;
   /** Максимальная пауза между попытками (мс). */
   retryMaxDelay?: number;
+  /** Таймаут HTTP-запроса к Telegram (мс). 0 отключает таймаут встроенного клиента. */
+  requestTimeoutMs?: number;
 }
 
 export interface FormatMessageInput {
@@ -156,6 +158,7 @@ export interface NormalizedOptions {
   retryInitialDelay: number;
   retryBackoffFactor: number;
   retryMaxDelay: number;
+  requestTimeoutMs: number;
   formatMessage?: TelegramTransportOptions['formatMessage'];
   onDeliveryError?: TelegramTransportOptions['onDeliveryError'];
   send?: TelegramTransportOptions['send'];

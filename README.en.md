@@ -69,6 +69,7 @@ When the log contains `err`, an **Error** section with `message` and `stack` is 
 
 - Retry delivery on 429 and 5xx responses.
 - Tune delays with `retryAttempts`, `retryInitialDelay`, `retryBackoffFactor`, `retryMaxDelay`.
+- Abort slow Telegram requests with `requestTimeoutMs` (`10000` ms by default) and retry timeout failures.
 - Respect `retry_after` hints returned by Telegram.
 - Set `retryAttempts: 1` to disable retries entirely.
 

@@ -1,4 +1,4 @@
-import { buildTelegramUrl } from './utils';
+import { buildTelegramUrl, createRequestTimeout } from './utils';
 import {
   NormalizedOptions,
   TelegramInputFile,
@@ -34,6 +34,7 @@ export class TelegramDeliveryError extends Error {
     readonly response?: TelegramErrorResponse,
     readonly status?: number,
     readonly cause?: unknown,
+    readonly isTimeout = false,
   ) {
     super(message);
     this.name = 'TelegramDeliveryError';
@@ -61,15 +62,41 @@ export class TelegramClient {
       }
 
       const url = buildTelegramUrl(this.options.botToken, request.method);
-      let response;
+      const timeout = createRequestTimeout(this.options.requestTimeoutMs);
+
       try {
         const { body, headers } = this.prepareRequestBody(request);
-        response = await fetch(url, {
+        const response = await fetch(url, {
           method: 'POST',
           headers,
           body,
+          signal: timeout.signal,
         });
+
+        const data = (await response.json().catch(() => ({}))) as TelegramErrorResponse;
+
+        if (!response.ok || !data.ok) {
+          const description = data?.description ?? response.statusText ?? 'Unknown error';
+          throw new TelegramDeliveryError(
+            'Ошибка Telegram API (' + request.method + '): ' + description,
+            data,
+            response.status,
+          );
+        }
       } catch (error) {
+        if (timeout.didTimeout()) {
+          throw new TelegramDeliveryError(
+            `Таймаут запроса к Telegram (${request.method}) после ${this.options.requestTimeoutMs} мс`,
+            undefined,
+            undefined,
+            error,
+            true,
+          );
+        }
+        if (error instanceof TelegramDeliveryError) {
+          throw error;
+        }
+
         const reason = (error as Error)?.message ?? 'неизвестная ошибка';
         throw new TelegramDeliveryError(
           'Ошибка сети Telegram (' + request.method + '): ' + reason,
@@ -77,17 +104,8 @@ export class TelegramClient {
           undefined,
           error,
         );
-      }
-
-      const data = (await response.json().catch(() => ({}))) as TelegramErrorResponse;
-
-      if (!response.ok || !data.ok) {
-        const description = data?.description ?? response.statusText ?? 'Unknown error';
-        throw new TelegramDeliveryError(
-          'Ошибка Telegram API (' + request.method + '): ' + description,
-          data,
-          response.status,
-        );
+      } finally {
+        timeout.dispose();
       }
     });
   }
@@ -374,6 +392,9 @@ export class TelegramClient {
    */
   private isRetryable(error: unknown): boolean {
     if (error instanceof TelegramDeliveryError) {
+      if (error.isTimeout) {
+        return true;
+      }
       const code = this.resolveStatusCode(error);
       if (code === 429) {
         return true;

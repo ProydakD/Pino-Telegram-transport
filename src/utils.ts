@@ -21,6 +21,7 @@ const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_INITIAL_DELAY = 500;
 const DEFAULT_RETRY_BACKOFF = 2;
 const DEFAULT_RETRY_MAX_DELAY = 10000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 
 const PINO_LEVEL_VALUES = Object.freeze({
   trace: 10,
@@ -78,6 +79,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     retryInitialDelay,
     options.retryMaxDelay ?? DEFAULT_RETRY_MAX_DELAY,
   );
+  const requestTimeoutMs = normalizeRequestTimeoutMs(options.requestTimeoutMs);
 
   return {
     botToken,
@@ -96,6 +98,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     retryInitialDelay,
     retryBackoffFactor,
     retryMaxDelay,
+    requestTimeoutMs,
     formatMessage: options.formatMessage || createMediaFormatter(),
     onDeliveryError: options.onDeliveryError,
     send: options.send,
@@ -202,6 +205,19 @@ function resolveMinLevel(level: TelegramTransportOptions['minLevel']): number {
   throw new Error('Неизвестный уровень логирования: ' + String(level));
 }
 
+function normalizeRequestTimeoutMs(value: TelegramTransportOptions['requestTimeoutMs']): number {
+  if (value === undefined || value === null) {
+    return DEFAULT_REQUEST_TIMEOUT_MS;
+  }
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    throw new Error('requestTimeoutMs должен быть числом');
+  }
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.trunc(value));
+}
+
 /**
  * Собирает URL вызова метода Telegram Bot API.
  *
@@ -262,4 +278,43 @@ export function formatTimestamp(time?: number | string): string {
  */
 export function ensureArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
+}
+
+interface RequestTimeoutContext {
+  signal?: AbortSignal;
+  dispose: () => void;
+  didTimeout: () => boolean;
+}
+
+/**
+ * Создаёт AbortSignal с ограничением по времени для HTTP-запросов.
+ *
+ * @param timeoutMs Максимальное время ожидания в миллисекундах. 0 отключает таймаут.
+ * @returns Контекст с сигналом, функцией очистки таймера и флагом срабатывания.
+ */
+export function createRequestTimeout(timeoutMs: number): RequestTimeoutContext {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return {
+      signal: undefined,
+      dispose: () => {},
+      didTimeout: () => false,
+    };
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  timer.unref?.();
+
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer);
+    },
+    didTimeout: () => timedOut,
+  };
 }

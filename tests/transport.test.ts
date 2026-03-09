@@ -11,6 +11,7 @@ import {
 } from '../src/types';
 
 const TOKEN = '123:ABC';
+const originalFetch = globalThis.fetch;
 
 interface RecordedRequest {
   method: TelegramMethod;
@@ -52,6 +53,32 @@ function createTransport(custom?: Partial<TelegramTransportOptions>, recorder?: 
   return { stream, recorder: rec };
 }
 
+function createTelegramResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function createAbortError(): Error {
+  const error = new Error('The operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function createTimeoutResponse(init?: Parameters<typeof fetch>[1]): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    const abort = () => {
+      reject(createAbortError());
+    };
+    if (init?.signal?.aborted) {
+      abort();
+      return;
+    }
+    init?.signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
 async function flush(ms = 10) {
   if (vi.isFakeTimers()) {
     await vi.advanceTimersByTimeAsync(ms);
@@ -69,6 +96,7 @@ function expectSingleRequest(recorder: Recorder): RecordedRequest {
 describe('pino-telegram transport', () => {
   afterEach(() => {
     vi.useRealTimers();
+    globalThis.fetch = originalFetch;
   });
 
   it('sends log message to Telegram', async () => {
@@ -583,6 +611,83 @@ describe('pino-telegram transport', () => {
     expect(attempts).toHaveLength(3);
     expect(attempts[1] - attempts[0]).toBeGreaterThanOrEqual(1000);
     expect(attempts[2] - attempts[1]).toBeGreaterThanOrEqual(1000);
+  });
+
+  it('прерывает запрос по requestTimeoutMs и передаёт timeout в onDeliveryError', async () => {
+    vi.useFakeTimers();
+
+    const onDeliveryError = vi.fn();
+    const fetchMock = vi.fn((_input: Parameters<typeof fetch>[0], init) =>
+      createTimeoutResponse(init),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const { stream } = createTransport({
+      send: undefined,
+      onDeliveryError,
+      minDelayBetweenMessages: 0,
+      requestTimeoutMs: 50,
+      retryAttempts: 1,
+    });
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Timeout once' })}\n`);
+    stream.end();
+
+    await flush();
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.runOnlyPendingTimersAsync();
+    await flush();
+
+    await vi.waitFor(() => {
+      expect(onDeliveryError).toHaveBeenCalledTimes(1);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onDeliveryError.mock.calls[0][0]).toBeInstanceOf(TelegramDeliveryError);
+    expect((onDeliveryError.mock.calls[0][0] as TelegramDeliveryError).message).toContain(
+      'Таймаут запроса к Telegram (sendMessage) после 50 мс',
+    );
+  });
+
+  it('повторяет запрос после timeout встроенного клиента', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    const attempts: number[] = [];
+    const onDeliveryError = vi.fn();
+    const fetchMock = vi.fn((_input: Parameters<typeof fetch>[0], init) => {
+      attempts.push(Date.now());
+      if (attempts.length < 3) {
+        return createTimeoutResponse(init);
+      }
+      return Promise.resolve(createTelegramResponse({ ok: true, result: true }));
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const { stream } = createTransport({
+      send: undefined,
+      onDeliveryError,
+      minDelayBetweenMessages: 0,
+      requestTimeoutMs: 50,
+      retryAttempts: 3,
+      retryInitialDelay: 100,
+      retryBackoffFactor: 1,
+      retryMaxDelay: 100,
+    });
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Retry after timeout' })}\n`);
+    stream.end();
+
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runOnlyPendingTimersAsync();
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(onDeliveryError).not.toHaveBeenCalled();
+    expect(attempts).toHaveLength(3);
+    expect(attempts[1] - attempts[0]).toBeGreaterThanOrEqual(150);
+    expect(attempts[2] - attempts[1]).toBeGreaterThanOrEqual(150);
   });
 
   it('applies exponential backoff for server errors', async () => {

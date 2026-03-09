@@ -39,6 +39,25 @@ function createResponse(payload: unknown, status = 200): Response {
   });
 }
 
+function createAbortError(): Error {
+  const error = new Error('The operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function createTimeoutResponse(init?: Parameters<typeof fetch>[1]): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    const abort = () => {
+      reject(createAbortError());
+    };
+    if (init?.signal?.aborted) {
+      abort();
+      return;
+    }
+    init?.signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
 beforeEach(() => {
   globalThis.fetch = ((...args: Parameters<typeof fetch>) => fetchMock(...args)) as typeof fetch;
 });
@@ -46,6 +65,7 @@ beforeEach(() => {
 afterEach(() => {
   fetchMock.mockReset();
   globalThis.fetch = originalFetch;
+  vi.useRealTimers();
 });
 
 describe('CLI утилита', () => {
@@ -93,6 +113,26 @@ describe('CLI утилита', () => {
 
     expect(exitCode).toBe(1);
     expect(stderrMessages.join('\n')).toContain('Не удалось проверить токен');
+  });
+
+  it('сообщает о таймауте при проверке токена', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementationOnce((_input: Parameters<typeof fetch>[0], init) =>
+      createTimeoutResponse(init),
+    );
+
+    const { context, stderrMessages } = createContext();
+    const pending = runCli(['check', '--token', '123:ABC'], context);
+
+    await vi.advanceTimersByTimeAsync(10000);
+    await vi.runOnlyPendingTimersAsync();
+
+    const exitCode = await pending;
+
+    expect(exitCode).toBe(1);
+    expect(stderrMessages.join('\n')).toContain(
+      'Превышено время ожидания ответа Telegram (getMe) после 10000 мс',
+    );
   });
 
   it('генерирует конфигурацию в JSON', async () => {
