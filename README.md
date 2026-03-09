@@ -11,18 +11,24 @@ A transport for [Pino](https://github.com/pinojs/pino) that forwards structured 
 - Drop low-severity records with a configurable minLevel.
 - Format outgoing messages with the built-in HTML formatter or a custom one.
 - Send text, photos, or documents with a single transport.
-- Override the delivery method with a custom `send` function for tests or alternative clients.
+- Override the delivery method with a custom `send` function in direct-stream mode.
 - Validate credentials and scaffold configs with the built-in CLI.
 
 ## Requirements
 
 - Node.js 18+
+- Node.js 20+ when used with `pino@10`
+- Supported combinations:
+  - `pino@^9` on Node.js 18+
+  - `pino@^10` on Node.js 20+
 - A Telegram bot with write access to all target chats
 
 ## Installation
 
 ```bash
-npm install pino-telegram-logger-transport
+npm install pino@^10 pino-telegram-logger-transport
+# or
+npm install pino@^9 pino-telegram-logger-transport
 ```
 
 ## Quick Start
@@ -114,6 +120,8 @@ async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod)
 ```
 
 The `send` option receives the payload and the selected method. Legacy handlers that expect a single argument remain compatible — the second argument will be ignored.
+Pass `send`, `formatMessage`, and `onDeliveryError` only through direct transport creation (`const stream = telegramTransport(options); const logger = pino({}, stream);`).
+The `transport.target` mode serializes options and should be treated as serializable-only.
 
 ## Framework Integrations
 

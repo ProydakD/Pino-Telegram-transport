@@ -17,7 +17,8 @@ English version · [Русская версия](faq.ru.md)
 ## What causes DataCloneError?
 
 - Pino serialises transport options for the worker; functions (`formatMessage`, `send`, `onDeliveryError`) cannot be cloned.
-- Disable the worker with `worker: { enabled: false }`, or create the transport manually and pass the stream to `pino`.
+- Use direct transport creation and pass the stream to `pino`: `const stream = telegramTransport(options); const logger = pino({}, stream);`.
+- Treat `transport.target` as a serializable-only mode, even if your current Node.js or Pino version appears to accept extra worker flags.
 
 ## How can I send captions longer than 1024 characters?
 

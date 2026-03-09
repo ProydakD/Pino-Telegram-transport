@@ -4,7 +4,7 @@ English version · [Русская версия](usage.ru.md)
 
 ## Basic integration with Pino
 
-> ℹ️ When you pass functions in the transport options (for example `onDeliveryError`), disable the worker (`worker: { enabled: false }`) to avoid `DataCloneError`. Alternatively create the transport manually: `const stream = telegramTransport(options); const logger = pino({}, stream);`
+> ℹ️ Use `transport.target` only with serializable options. If you need callbacks such as `formatMessage`, `send`, or `onDeliveryError`, create the transport directly: `const stream = telegramTransport(options); const logger = pino({}, stream);`
 
 ```ts
 import pino from 'pino';
@@ -58,25 +58,9 @@ const stream = telegramTransport({
 const logger = pino({}, stream);
 ```
 
-Use manual creation when you need to pass `formatMessage` or `send` without disabling the worker.
+Use direct creation whenever you need callbacks such as `formatMessage`, `send`, or `onDeliveryError`.
 
 > ℹ️ If `botToken` or `chatId` are missing, the transport falls back to a no-op mode and prints a warning.
-
-## Disabling the worker (Pino ≥ 7)
-
-```ts
-const logger = pino({
-  transport: {
-    target: 'pino-telegram-logger-transport',
-    options: { botToken, chatId, formatMessage: customFormatter },
-    worker: {
-      enabled: false,
-    },
-  },
-});
-```
-
-Not every Node.js version allows disabling the worker without extra flags — test your environment.
 
 ## Passing custom context
 
@@ -176,6 +160,7 @@ async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod)
 ```
 
 The `send` option lets you integrate your own queue or HTTP client. Handlers with a single argument remain compatible — the second argument is ignored.
+Pass `send` only in direct-stream mode. Callback options are not a supported scenario for `transport.target`.
 
 ## Framework integrations
 

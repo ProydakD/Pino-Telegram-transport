@@ -11,18 +11,24 @@
 - Ограничивай отправку по порогу уровня через `minLevel`.
 - Форматируй сообщения встроенным HTML-форматтером или собственным.
 - Отправляй текст, фото или документы в рамках одного транспорта.
-- Переопределяй метод отправки функцией `send` для тестов или кастомных клиентов.
+- Переопределяй метод отправки функцией `send` в direct-stream режиме.
 - Проверяй токен и генерируй конфигурацию через встроенную CLI.
 
 ## Требования
 
 - Node.js 18+
+- Node.js 20+ при использовании `pino@10`
+- Поддерживаемые сочетания:
+  - `pino@^9` на Node.js 18+
+  - `pino@^10` на Node.js 20+
 - Telegram-бот с правами записи в целевые чаты
 
 ## Установка
 
 ```bash
-npm install pino-telegram-logger-transport
+npm install pino@^10 pino-telegram-logger-transport
+# или
+npm install pino@^9 pino-telegram-logger-transport
 ```
 
 ## Быстрый Старт
@@ -114,6 +120,8 @@ async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod)
 ```
 
 Опция `send` получает полезную нагрузку и выбранный метод. Старые обработчики, ожидающие один аргумент, остаются рабочими: второй параметр будет игнорирован.
+Передавайте `send`, `formatMessage` и `onDeliveryError` только при прямом создании транспорта (`const stream = telegramTransport(options); const logger = pino({}, stream);`).
+Режим `transport.target` сериализует опции и должен использоваться только с сериализуемыми значениями.
 
 ## Интеграция с Фреймворками
 

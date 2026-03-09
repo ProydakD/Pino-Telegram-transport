@@ -4,7 +4,7 @@
 
 ## Базовая интеграция с Pino
 
-> ℹ️ Если планируете передавать функции в опции (например, `onDeliveryError`), отключите воркер (`worker: { enabled: false }`), чтобы избежать `DataCloneError`. Альтернатива — создать транспорт напрямую: `const stream = telegramTransport(options); const logger = pino({}, stream);`
+> ℹ️ Используйте `transport.target` только с сериализуемыми опциями. Если нужны callback-опции вроде `formatMessage`, `send` или `onDeliveryError`, создавайте транспорт напрямую: `const stream = telegramTransport(options); const logger = pino({}, stream);`
 
 ```ts
 import pino from 'pino';
@@ -58,25 +58,9 @@ const stream = telegramTransport({
 const logger = pino({}, stream);
 ```
 
-Используйте прямое создание, если нужно передать функции `formatMessage` или `send` без отключения воркера.
+Используйте прямое создание, если нужно передать callback-опции `formatMessage`, `send` или `onDeliveryError`.
 
 > ℹ️ Если `botToken` или `chatId` не указаны, транспорт отключается и выводит предупреждение, не прерывая процесс.
-
-## Отключение воркера (Pino ≥ 7)
-
-```ts
-const logger = pino({
-  transport: {
-    target: 'pino-telegram-logger-transport',
-    options: { botToken, chatId, formatMessage: customFormatter },
-    worker: {
-      enabled: false,
-    },
-  },
-});
-```
-
-Не все версии Node поддерживают отключение воркера без дополнительных флагов — проверяйте окружение.
 
 ## Пользовательский контекст
 
@@ -176,6 +160,7 @@ async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod)
 ```
 
 Опция `send` позволяет интегрировать собственную очередь или HTTP-клиент. Функции с одним аргументом остаются совместимыми — второй параметр будет отброшен.
+Передавайте `send` только в direct-stream режиме. Для `transport.target` callback-опции не поддерживаются.
 
 ## Интеграция с фреймворками
 
