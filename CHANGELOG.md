@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.7.1](https://github.com/ProydakD/pino-telegram-transport/compare/v1.7.0...v1.7.1) (2026-03-09)
+
+
+### Documentation
+
+* обновлена документация для использования сериализуемых опций в транспорте ([7014f9f](https://github.com/ProydakD/pino-telegram-transport/commit/7014f9f5db8462d1185827359d3920303f963c79))
+
 ## [1.7.0](https://github.com/ProydakD/pino-telegram-transport/compare/v1.6.0...v1.7.0) (2025-10-01)
 
 
