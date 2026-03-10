@@ -16,6 +16,7 @@
 | `contextKeys`             | `string \| string[]`                                                                 | `['context', 'ctx']`                                                     | Задаёт ключи, из которых берётся контекст.                                                          |
 | `includeExtras`           | `boolean`                                                                            | `true`                                                                   | Добавляет блок `Extras` с прочими полями лога.                                                      |
 | `extraKeys`               | `string[]`                                                                           | —                                                                        | Ограничивает поля, попадающие в `Extras`.                                                           |
+| `redactKeys`              | `string[]`                                                                           | `['token', 'password', 'secret', 'authorization', 'cookie', 'apiKey']`   | Редактирует чувствительные ключи в блоках `Context`, `Error` и `Extras`. Пустой массив отключает дефолтную редакцию. |
 | `maxMessageLength`        | `number`                                                                             | `4096`                                                                   | Максимальная длина текста. Для медиа учитывайте лимит подписи 1024 символа.                         |
 | `minDelayBetweenMessages` | `number`                                                                             | `100`                                                                    | Минимальная пауза (мс) между сообщениями для одного чата.                                           |
 | `minLevel`                | `number \| 'trace' \| 'debug' \| 'info' \| 'warn' \| 'error' \| 'fatal' \| 'silent'` | `0`                                                                      | Игнорирует записи ниже указанного уровня. Принимает числа и названия уровней Pino.                  |
@@ -82,6 +83,8 @@ headings: {
 
 - Контекст сериализуется в блок `<pre>`.
 - Секция Extras собирает пары `ключ: значение`, исключая зарезервированные поля (`level`, `time`, `msg`, `context`, `err`).
+- По умолчанию чувствительные ключи (`token`, `password`, `secret`, `authorization`, `cookie`, `apiKey`) заменяются на `[REDACTED]`.
+- Редакция применяется к `Context`, `Error` и `Extras`, но не мутирует исходный лог-объект.
 - Для крупных объектов учитывайте лимит `maxMessageLength`.
 
 ## Ограничения Telegram

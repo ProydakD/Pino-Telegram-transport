@@ -94,6 +94,14 @@ const logger = pino({
 extraKeys: ['requestId', 'origin'];
 ```
 
+Для редактирования чувствительных ключей используйте:
+
+```ts
+redactKeys: ['token', 'password', 'secret', 'authorization', 'cookie', 'apiKey'];
+```
+
+Пустой массив `redactKeys: []` отключает дефолтную редакцию. Изменения затрагивают только блоки `Context`, `Error` и `Extras`.
+
 ## Повторы отправки
 
 ```ts

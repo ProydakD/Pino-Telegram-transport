@@ -83,6 +83,8 @@ export interface TelegramTransportOptions {
   includeExtras?: boolean;
   /** Белый список полей для секции Extras. */
   extraKeys?: string[];
+  /** Ключи, значения которых нужно редактировать в Context/Error/Extras. */
+  redactKeys?: string[];
   /** Максимальная длина текстового сообщения. */
   maxMessageLength?: number;
   /** Минимальный интервал между сообщениями в одном чате (мс). */
@@ -158,6 +160,7 @@ export interface NormalizedOptions {
   contextKeys: string[];
   includeExtras: boolean;
   extraKeys?: string[];
+  redactKeys: string[];
   maxMessageLength: number;
   minDelayBetweenMessages: number;
   minLevel: number;

@@ -94,6 +94,14 @@ Or limit the allowed fields:
 extraKeys: ['requestId', 'origin'];
 ```
 
+Use the following option to redact sensitive keys:
+
+```ts
+redactKeys: ['token', 'password', 'secret', 'authorization', 'cookie', 'apiKey'];
+```
+
+An empty list `redactKeys: []` disables the default redaction set. The change only affects the `Context`, `Error`, and `Extras` blocks.
+
 ## Retry configuration
 
 ```ts

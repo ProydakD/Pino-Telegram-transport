@@ -25,6 +25,15 @@ const DEFAULT_RETRY_MAX_DELAY = 10000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_MAX_QUEUE_SIZE = 1000;
 const DEFAULT_OVERFLOW_STRATEGY: TelegramQueueOverflowStrategy = 'dropOldest';
+const DEFAULT_REDACT_KEYS = Object.freeze([
+  'token',
+  'password',
+  'secret',
+  'authorization',
+  'cookie',
+  'apikey',
+]);
+const REDACTED_VALUE = '[REDACTED]';
 
 const PINO_LEVEL_VALUES = Object.freeze({
   trace: 10,
@@ -85,6 +94,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
   const requestTimeoutMs = normalizeRequestTimeoutMs(options.requestTimeoutMs);
   const maxQueueSize = normalizeMaxQueueSize(options.maxQueueSize);
   const overflowStrategy = normalizeOverflowStrategy(options.overflowStrategy);
+  const redactKeys = normalizeRedactKeys(options.redactKeys);
 
   return {
     botToken,
@@ -96,6 +106,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     contextKeys,
     includeExtras: options.includeExtras ?? DEFAULT_INCLUDE_EXTRAS,
     extraKeys: options.extraKeys,
+    redactKeys,
     maxMessageLength: options.maxMessageLength ?? DEFAULT_MAX_LENGTH,
     minDelayBetweenMessages: options.minDelayBetweenMessages ?? DEFAULT_MIN_DELAY,
     minLevel,
@@ -250,6 +261,22 @@ function normalizeOverflowStrategy(
   throw new Error('Неизвестная стратегия переполнения очереди: ' + String(value));
 }
 
+function normalizeRedactKeys(value: TelegramTransportOptions['redactKeys']): string[] {
+  if (value === undefined || value === null) {
+    return [...DEFAULT_REDACT_KEYS];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error('redactKeys должен быть массивом строк');
+  }
+
+  const normalized = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+
+  return Array.from(new Set(normalized));
+}
+
 /**
  * Собирает URL вызова метода Telegram Bot API.
  *
@@ -310,6 +337,60 @@ export function formatTimestamp(time?: number | string): string {
  */
 export function ensureArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * Создаёт копию значения с редактированием чувствительных ключей.
+ *
+ * @param value Исходное значение для форматирования.
+ * @param redactKeys Ключи, значения которых заменяются маркером.
+ * @returns Новая структура данных без мутации исходного значения.
+ */
+export function redactSensitiveData(value: unknown, redactKeys: string[]): unknown {
+  if (redactKeys.length === 0) {
+    return cloneUnknownValue(value);
+  }
+
+  const redactSet = new Set(redactKeys.map((item) => item.toLowerCase()));
+  return cloneUnknownValue(value, redactSet);
+}
+
+function cloneUnknownValue(value: unknown, redactSet?: ReadonlySet<string>): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneUnknownValue(item, redactSet));
+  }
+
+  if (value instanceof Date) {
+    return new Date(value);
+  }
+
+  if (typeof value !== 'object') {
+    return value;
+  }
+
+  const entries = Object.entries(value);
+  const clone = Object.create(Object.getPrototypeOf(value)) as Record<string, unknown>;
+
+  for (const [key, entryValue] of entries) {
+    clone[key] = redactSet?.has(key.toLowerCase())
+      ? REDACTED_VALUE
+      : cloneUnknownValue(entryValue, redactSet);
+  }
+
+  return clone;
 }
 
 interface RequestTimeoutContext {

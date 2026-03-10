@@ -16,6 +16,7 @@ English version · [Русская версия](configuration.ru.md)
 | `contextKeys`             | `string \| string[]`                                                                 | `['context', 'ctx']`                                                     | Keys used to read the context payload.                                                   |
 | `includeExtras`           | `boolean`                                                                            | `true`                                                                   | Adds the `Extras` section with remaining fields.                                         |
 | `extraKeys`               | `string[]`                                                                           | —                                                                        | Whitelists fields that appear in `Extras`.                                               |
+| `redactKeys`              | `string[]`                                                                           | `['token', 'password', 'secret', 'authorization', 'cookie', 'apiKey']`   | Redacts sensitive keys inside the `Context`, `Error`, and `Extras` blocks. An empty array disables the default redaction list. |
 | `maxMessageLength`        | `number`                                                                             | `4096`                                                                   | Maximum text length. Remember the 1024-character caption limit for media.                |
 | `minDelayBetweenMessages` | `number`                                                                             | `100`                                                                    | Minimum delay (ms) between messages for the same chat.                                   |
 | `minLevel`                | `number \| 'trace' \| 'debug' \| 'info' \| 'warn' \| 'error' \| 'fatal' \| 'silent'` | `0`                                                                      | Skips records below the threshold. Accepts numeric values and standard Pino level names. |
@@ -82,6 +83,8 @@ All keys are optional; the transport falls back to defaults when a heading is om
 
 - Context is rendered inside a `<pre>` block.
 - The Extras section prints `key: value` pairs excluding reserved fields (`level`, `time`, `msg`, `context`, `err`).
+- Sensitive keys (`token`, `password`, `secret`, `authorization`, `cookie`, `apiKey`) are replaced with `[REDACTED]` by default.
+- Redaction applies to `Context`, `Error`, and `Extras` without mutating the original log object.
 - Watch `maxMessageLength` when logging large objects.
 
 ## Telegram Limits

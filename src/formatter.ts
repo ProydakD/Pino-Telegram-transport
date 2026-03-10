@@ -1,4 +1,4 @@
-﻿import { escapeHtml, formatTimestamp, truncate } from './utils';
+import { escapeHtml, formatTimestamp, redactSensitiveData, truncate } from './utils';
 import { FormatMessageInput, FormatMessageResult, NormalizedOptions, PinoLog } from './types';
 
 const LEVEL_LABELS: Record<number, string> = {
@@ -62,17 +62,21 @@ export function buildDefaultMessage(
 
   const context = extractContext(log, options);
   if (context) {
-    parts.push(formatContextBlock(headings.context, context));
+    parts.push(
+      formatContextBlock(headings.context, redactSensitiveData(context, options.redactKeys)),
+    );
   }
 
-  const errorBlock = formatError(log, headings);
+  const errorBlock = formatError(log, headings, options);
   if (errorBlock) {
     parts.push(errorBlock);
   }
 
   const extras = extractExtras(log, options);
   if (extras) {
-    parts.push(formatContextBlock(headings.extras, extras));
+    parts.push(
+      formatContextBlock(headings.extras, redactSensitiveData(extras, options.redactKeys)),
+    );
   }
 
   const textContent = parts.join('\n');
@@ -138,9 +142,14 @@ function formatContextBlock(title: string, value: unknown): string {
  *
  * @param log Исходный лог pino.
  * @param headings Пользовательские заголовки форматтера.
+ * @param options Нормализованные опции транспорта.
  * @returns Готовый HTML-блок или undefined, если err отсутствует.
  */
-function formatError(log: PinoLog, headings: NormalizedOptions['headings']): string | undefined {
+function formatError(
+  log: PinoLog,
+  headings: NormalizedOptions['headings'],
+  options: NormalizedOptions,
+): string | undefined {
   const err = log.err as Record<string, unknown> | undefined;
   if (!err) {
     return undefined;
@@ -149,7 +158,7 @@ function formatError(log: PinoLog, headings: NormalizedOptions['headings']): str
     message: err.message,
     stack: err.stack,
   };
-  return formatContextBlock(headings.error, payload);
+  return formatContextBlock(headings.error, redactSensitiveData(payload, options.redactKeys));
 }
 
 /**

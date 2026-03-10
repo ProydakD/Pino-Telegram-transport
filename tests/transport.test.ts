@@ -257,6 +257,111 @@ describe('pino-telegram transport', () => {
     expect(payload.text).toContain('foo');
   });
 
+  it('redacts default sensitive keys in context and extras without mutating the source log', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport({}, recorder);
+    const log = {
+      level: 30,
+      msg: 'Header token=visible',
+      context: {
+        token: 'ctx-token',
+        nested: {
+          password: 'ctx-password',
+          keep: 'context-visible',
+        },
+        list: [{ authorization: 'Bearer ctx-secret' }],
+      },
+      apiKey: 'extra-api-key',
+      metadata: {
+        cookie: 'session-cookie',
+        keep: true,
+      },
+    };
+    const originalLog = structuredClone(log);
+
+    stream.write(`${JSON.stringify(log)}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
+    expect(payload.text).toContain('Header token=visible');
+    expect(payload.text).toContain('"token": "[REDACTED]"');
+    expect(payload.text).toContain('"password": "[REDACTED]"');
+    expect(payload.text).toContain('"authorization": "[REDACTED]"');
+    expect(payload.text).toContain('"apiKey": "[REDACTED]"');
+    expect(payload.text).toContain('"cookie": "[REDACTED]"');
+    expect(payload.text).toContain('"keep": "context-visible"');
+    expect(payload.text).toContain('"keep": true');
+    expect(log).toEqual(originalLog);
+  });
+
+  it('uses custom redactKeys for context, error, and extras', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        redactKeys: ['sessionId', 'message'],
+      },
+      recorder,
+    );
+    const log = {
+      level: 50,
+      msg: 'Custom redact config',
+      context: {
+        token: 'ctx-token',
+        sessionId: 'ctx-session',
+      },
+      err: {
+        message: 'error message should be hidden',
+        stack: 'stack trace should stay visible',
+      },
+      sessionId: 'extra-session',
+    };
+
+    stream.write(`${JSON.stringify(log)}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
+    expect(payload.text).toContain('"token": "ctx-token"');
+    expect(payload.text).toContain('"sessionId": "[REDACTED]"');
+    expect(payload.text).toContain('"message": "[REDACTED]"');
+    expect(payload.text).toContain('"stack": "stack trace should stay visible"');
+    expect(log.context.sessionId).toBe('ctx-session');
+    expect(log.err.message).toBe('error message should be hidden');
+  });
+
+  it('allows disabling default redaction with an empty redactKeys list', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        redactKeys: [],
+      },
+      recorder,
+    );
+
+    stream.write(
+      `${JSON.stringify({
+        level: 30,
+        msg: 'No redaction',
+        context: { token: 'ctx-token' },
+        apiKey: 'extra-api-key',
+      })}\n`,
+    );
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
+    expect(payload.text).toContain('"token": "ctx-token"');
+    expect(payload.text).toContain('"apiKey": "extra-api-key"');
+    expect(payload.text).not.toContain('[REDACTED]');
+  });
+
   it('allows disabling extras block entirely', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport({ includeExtras: false }, recorder);
