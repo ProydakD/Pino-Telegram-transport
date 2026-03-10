@@ -84,6 +84,25 @@ const logger = pino({
 - The preset shortens the first line and collapses `Context`, `Error`, and `Extras` into compact JSON blocks.
 - If `formatMessage` is provided, the custom callback still takes precedence over `formatPreset`.
 
+## Verbose preset
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      formatPreset: 'verbose',
+    },
+  },
+});
+```
+
+- `formatPreset: 'verbose'` explicitly enables the current detailed renderer with `Time`, `Context`, `Error`, and `Extras` blocks.
+- `formatPreset: 'default'` is kept as a backward-compatible alias of `verbose`.
+- If `formatPreset` is omitted, the transport behaves exactly as before.
+
 ## Creating the transport directly
 
 ```ts

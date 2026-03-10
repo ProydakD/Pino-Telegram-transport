@@ -47,13 +47,19 @@ type BuiltInMessageBuilder = (
 export function createMediaFormatter(
   options: MediaFormatterOptions = {},
 ): (input: FormatMessageInput) => Promise<FormatMessageResult> | FormatMessageResult {
-  return createStructuredFormatter(buildDefaultMessage, options);
+  return createVerboseFormatter(options);
 }
 
 export function createCompactFormatter(
   options: MediaFormatterOptions = {},
 ): (input: FormatMessageInput) => Promise<FormatMessageResult> | FormatMessageResult {
   return createStructuredFormatter(buildCompactMessage, options);
+}
+
+export function createVerboseFormatter(
+  options: MediaFormatterOptions = {},
+): (input: FormatMessageInput) => Promise<FormatMessageResult> | FormatMessageResult {
+  return createStructuredFormatter(buildDefaultMessage, options);
 }
 
 function createStructuredFormatter(

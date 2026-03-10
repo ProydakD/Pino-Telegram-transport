@@ -7,7 +7,7 @@
   TelegramQueueOverflowStrategy,
   TelegramTransportOptions,
 } from './types';
-import { createCompactFormatter, createMediaFormatter } from './presets';
+import { createCompactFormatter, createMediaFormatter, createVerboseFormatter } from './presets';
 
 const TELEGRAM_BASE_URL = 'https://api.telegram.org';
 const DEFAULT_CONTEXT_KEYS = ['context', 'ctx'];
@@ -124,9 +124,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     retryBackoffFactor,
     retryMaxDelay,
     requestTimeoutMs,
-    formatMessage:
-      options.formatMessage ??
-      (formatPreset === 'compact' ? createCompactFormatter() : createMediaFormatter()),
+    formatMessage: options.formatMessage ?? resolveBuiltInFormatter(formatPreset),
     onDeliveryError: options.onDeliveryError,
     send: options.send,
     headings: {
@@ -291,10 +289,22 @@ function normalizeFormatPreset(
   if (value === undefined || value === null) {
     return 'default';
   }
-  if (value === 'default' || value === 'compact') {
+  if (value === 'default' || value === 'compact' || value === 'verbose') {
     return value;
   }
   throw new Error('Неизвестный встроенный пресет форматирования: ' + String(value));
+}
+
+function resolveBuiltInFormatter(
+  preset: TelegramFormatPreset,
+): NonNullable<NormalizedOptions['formatMessage']> {
+  if (preset === 'compact') {
+    return createCompactFormatter();
+  }
+  if (preset === 'verbose') {
+    return createVerboseFormatter();
+  }
+  return createMediaFormatter();
 }
 
 function normalizeRedactKeys(value: TelegramTransportOptions['redactKeys']): string[] {

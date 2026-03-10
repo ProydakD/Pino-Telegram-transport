@@ -339,6 +339,61 @@ describe('pino-telegram transport', () => {
     expect(text).toContain('<pre>Extras={&quot;foo&quot;:&quot;bar&quot;}</pre>');
   });
 
+  it('renders verbose preset explicitly with the same output as the default preset', async () => {
+    const defaultRecorder = createRecorder();
+    const verboseRecorder = createRecorder();
+    const { stream: defaultStream } = createTransport({}, defaultRecorder);
+    const { stream: verboseStream } = createTransport({ formatPreset: 'verbose' }, verboseRecorder);
+    const logLine = `${JSON.stringify({
+      level: 40,
+      msg: 'Verbose event',
+      time: 1700000000000,
+      context: { requestId: 'req-verbose' },
+      err: { message: 'Verbose boom', stack: 'verbose stack' },
+      foo: 'bar',
+    })}\n`;
+
+    defaultStream.write(logLine);
+    verboseStream.write(logLine);
+    defaultStream.end();
+    verboseStream.end();
+
+    await flush();
+    await flush();
+
+    const defaultPayload = expectSingleRequest(defaultRecorder).payload as TelegramMessagePayload;
+    const verbosePayload = expectSingleRequest(verboseRecorder).payload as TelegramMessagePayload;
+
+    expect(verbosePayload.text).toBe(defaultPayload.text);
+    expect(verbosePayload.text).toContain('<b>Time:</b>');
+    expect(verbosePayload.text).toContain('<b>Context:</b>');
+  });
+
+  it('keeps default preset as a backward-compatible alias of verbose', async () => {
+    const defaultAliasRecorder = createRecorder();
+    const verboseRecorder = createRecorder();
+    const { stream: defaultAliasStream } = createTransport(
+      { formatPreset: 'default' },
+      defaultAliasRecorder,
+    );
+    const { stream: verboseStream } = createTransport({ formatPreset: 'verbose' }, verboseRecorder);
+    const logLine = `${JSON.stringify({ level: 30, msg: 'Alias check', time: 1700000000000 })}\n`;
+
+    defaultAliasStream.write(logLine);
+    verboseStream.write(logLine);
+    defaultAliasStream.end();
+    verboseStream.end();
+
+    await flush();
+    await flush();
+
+    const defaultAliasPayload = expectSingleRequest(defaultAliasRecorder)
+      .payload as TelegramMessagePayload;
+    const verbosePayload = expectSingleRequest(verboseRecorder).payload as TelegramMessagePayload;
+
+    expect(defaultAliasPayload.text).toBe(verbosePayload.text);
+  });
+
   it('truncates compact preset output when splitLongMessages disabled', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport(

@@ -2,7 +2,7 @@
 
 export type TelegramMethod = 'sendMessage' | 'sendPhoto' | 'sendDocument';
 export type TelegramQueueOverflowStrategy = 'dropOldest' | 'dropNewest' | 'block';
-export type TelegramFormatPreset = 'default' | 'compact';
+export type TelegramFormatPreset = 'default' | 'compact' | 'verbose';
 
 export type PinoLevelName = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
 

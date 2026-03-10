@@ -84,6 +84,25 @@ const logger = pino({
 - Пресет делает короче первую строку и сворачивает `Context`, `Error`, `Extras` в компактные JSON-блоки.
 - Если передан `formatMessage`, пользовательский callback имеет приоритет над `formatPreset`.
 
+## Пресет Verbose
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      formatPreset: 'verbose',
+    },
+  },
+});
+```
+
+- `formatPreset: 'verbose'` явно включает текущий подробный рендер с блоками `Time`, `Context`, `Error`, `Extras`.
+- Значение `formatPreset: 'default'` сохранено как обратносуместимый алиас `verbose`.
+- Если `formatPreset` не указан, транспорт ведёт себя так же, как раньше.
+
 ## Прямое создание транспорта
 
 ```ts
