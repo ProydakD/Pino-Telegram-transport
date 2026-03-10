@@ -25,6 +25,9 @@ const DEFAULT_RETRY_MAX_DELAY = 10000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_MAX_QUEUE_SIZE = 1000;
 const DEFAULT_OVERFLOW_STRATEGY: TelegramQueueOverflowStrategy = 'dropOldest';
+const TRUNCATION_SUFFIX = '...';
+const HTML_VOID_TAGS = new Set(['br']);
+const HTML_ENTITY_PATTERN = /^&(?:#\d+|#x[\da-f]+|[a-z][a-z0-9]+);$/i;
 const DEFAULT_REDACT_KEYS = Object.freeze([
   'token',
   'password',
@@ -108,6 +111,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     extraKeys: options.extraKeys,
     redactKeys,
     maxMessageLength: options.maxMessageLength ?? DEFAULT_MAX_LENGTH,
+    splitLongMessages: options.splitLongMessages ?? false,
     minDelayBetweenMessages: options.minDelayBetweenMessages ?? DEFAULT_MIN_DELAY,
     minLevel,
     maxQueueSize,
@@ -299,18 +303,165 @@ export function escapeHtml(value: string): string {
 }
 
 /**
- * Обрезает строку до заданной длины, добавляя многоточие при необходимости.
+ * Обрезает plain-text строку до заданной длины, добавляя многоточие при необходимости.
  *
  * @param text Исходная строка.
  * @param maxLength Максимальный размер строки.
  * @returns Усечённая строка и флаг сокращения.
  */
-export function truncate(text: string, maxLength: number): { text: string; truncated: boolean } {
+export function truncateText(
+  text: string,
+  maxLength: number,
+): { text: string; truncated: boolean } {
   if (text.length <= maxLength) {
     return { text, truncated: false };
   }
-  const sliced = text.slice(0, maxLength - 3);
-  return { text: `${sliced}...`, truncated: true };
+  if (maxLength <= 0) {
+    return { text: '', truncated: text.length > 0 };
+  }
+  if (maxLength <= TRUNCATION_SUFFIX.length) {
+    return { text: TRUNCATION_SUFFIX.slice(0, maxLength), truncated: true };
+  }
+  const sliced = text.slice(0, maxLength - TRUNCATION_SUFFIX.length);
+  return { text: `${sliced}${TRUNCATION_SUFFIX}`, truncated: true };
+}
+
+/**
+ * Обрезает HTML-текст, не разрывая теги и HTML entities и закрывая открытые теги.
+ *
+ * @param text Исходная строка с HTML-разметкой.
+ * @param maxLength Максимальный размер строки.
+ * @returns Усечённая безопасная HTML-строка и флаг сокращения.
+ */
+export function truncateHtml(
+  text: string,
+  maxLength: number,
+): { text: string; truncated: boolean } {
+  if (text.length <= maxLength) {
+    return { text, truncated: false };
+  }
+  if (maxLength <= 0) {
+    return { text: '', truncated: text.length > 0 };
+  }
+  if (maxLength <= TRUNCATION_SUFFIX.length) {
+    return { text: TRUNCATION_SUFFIX.slice(0, maxLength), truncated: true };
+  }
+
+  const tokens = tokenizeHtml(text);
+  let prefix = '';
+  let currentLength = 0;
+  let openTags: HtmlOpenTag[] = [];
+
+  for (const token of tokens) {
+    const nextLength = currentLength + token.value.length;
+    const nextOpenTags = updateOpenTags(openTags, token);
+    const closingTags = buildClosingTags(nextOpenTags);
+
+    if (nextLength + TRUNCATION_SUFFIX.length + closingTags.length > maxLength) {
+      break;
+    }
+
+    prefix += token.value;
+    currentLength = nextLength;
+    openTags = nextOpenTags;
+  }
+
+  if (!prefix) {
+    return { text: TRUNCATION_SUFFIX.slice(0, maxLength), truncated: true };
+  }
+
+  return {
+    text: `${prefix}${TRUNCATION_SUFFIX}${buildClosingTags(openTags)}`,
+    truncated: true,
+  };
+}
+
+/**
+ * Разбивает plain-text строку на части заданной длины без потери содержимого.
+ *
+ * @param text Исходная строка.
+ * @param maxLength Максимальная длина одной части.
+ * @returns Последовательность частей в исходном порядке.
+ */
+export function splitText(text: string, maxLength: number): string[] {
+  if (maxLength <= 0) {
+    return [truncateText(text, maxLength).text];
+  }
+  if (text.length <= maxLength) {
+    return [text];
+  }
+
+  const parts: string[] = [];
+  let index = 0;
+
+  while (index < text.length) {
+    parts.push(text.slice(index, index + maxLength));
+    index += maxLength;
+  }
+
+  return parts;
+}
+
+/**
+ * Разбивает HTML-текст на несколько валидных частей, не разрывая теги и entities.
+ *
+ * @param text Исходная строка с HTML-разметкой.
+ * @param maxLength Максимальная длина одной части.
+ * @returns Последовательность HTML-safe частей.
+ */
+export function splitHtml(text: string, maxLength: number): string[] {
+  if (maxLength <= 0) {
+    return [truncateHtml(text, maxLength).text];
+  }
+  if (text.length <= maxLength) {
+    return [text];
+  }
+
+  const tokens = tokenizeHtml(text);
+  const parts: string[] = [];
+  let openTags: HtmlOpenTag[] = [];
+  let currentPart = '';
+  let currentPartHasTokens = false;
+  let index = 0;
+
+  while (index < tokens.length) {
+    if (!currentPart) {
+      currentPart = buildOpeningTags(openTags);
+      currentPartHasTokens = false;
+    }
+
+    const token = tokens[index];
+    const nextOpenTags = updateOpenTags(openTags, token);
+    const candidate = `${currentPart}${token.value}${buildClosingTags(nextOpenTags)}`;
+
+    if (candidate.length <= maxLength) {
+      currentPart += token.value;
+      currentPartHasTokens = true;
+      openTags = nextOpenTags;
+      index += 1;
+      continue;
+    }
+
+    if (currentPartHasTokens) {
+      parts.push(`${currentPart}${buildClosingTags(openTags)}`);
+      currentPart = '';
+      currentPartHasTokens = false;
+      continue;
+    }
+
+    const remainingHtml = `${buildOpeningTags(openTags)}${tokens
+      .slice(index)
+      .map((item) => item.value)
+      .join('')}`;
+    parts.push(truncateHtml(remainingHtml, maxLength).text);
+    return parts;
+  }
+
+  if (currentPartHasTokens || parts.length === 0) {
+    parts.push(`${currentPart}${buildClosingTags(openTags)}`);
+  }
+
+  return parts;
 }
 
 /**
@@ -394,6 +545,155 @@ function cloneUnknownValue(value: unknown, redactSet?: ReadonlySet<string>): unk
   }
 
   return clone;
+}
+
+type HtmlTokenKind = 'text' | 'entity' | 'tag';
+type HtmlTagKind = 'open' | 'close' | 'self';
+
+interface HtmlToken {
+  kind: HtmlTokenKind;
+  value: string;
+  tagKind?: HtmlTagKind;
+  tagName?: string;
+}
+
+interface HtmlOpenTag {
+  name: string;
+  value: string;
+}
+
+function tokenizeHtml(text: string): HtmlToken[] {
+  const tokens: HtmlToken[] = [];
+  let index = 0;
+
+  while (index < text.length) {
+    const tagToken = readHtmlTagToken(text, index);
+    if (tagToken) {
+      tokens.push(tagToken);
+      index += tagToken.value.length;
+      continue;
+    }
+
+    const entityToken = readHtmlEntityToken(text, index);
+    if (entityToken) {
+      tokens.push(entityToken);
+      index += entityToken.value.length;
+      continue;
+    }
+
+    const codePoint = text.codePointAt(index);
+    if (codePoint === undefined) {
+      break;
+    }
+
+    const value = String.fromCodePoint(codePoint);
+    tokens.push({
+      kind: 'text',
+      value,
+    });
+    index += value.length;
+  }
+
+  return tokens;
+}
+
+function readHtmlTagToken(text: string, index: number): HtmlToken | undefined {
+  if (text[index] !== '<') {
+    return undefined;
+  }
+
+  const closingIndex = text.indexOf('>', index + 1);
+  if (closingIndex === -1) {
+    return undefined;
+  }
+
+  const value = text.slice(index, closingIndex + 1);
+  const content = value.slice(1, -1).trim();
+  if (!content || content.startsWith('!') || content.startsWith('?')) {
+    return { kind: 'tag', value, tagKind: 'self' };
+  }
+
+  if (content.startsWith('/')) {
+    const tagName = extractHtmlTagName(content.slice(1));
+    return {
+      kind: 'tag',
+      value,
+      tagKind: tagName ? 'close' : 'self',
+      tagName,
+    };
+  }
+
+  const normalizedContent = content.replace(/\/\s*$/, '').trim();
+  const tagName = extractHtmlTagName(normalizedContent);
+  if (!tagName) {
+    return { kind: 'tag', value, tagKind: 'self' };
+  }
+
+  return {
+    kind: 'tag',
+    value,
+    tagKind: /\/\s*$/.test(content) || HTML_VOID_TAGS.has(tagName) ? 'self' : 'open',
+    tagName,
+  };
+}
+
+function readHtmlEntityToken(text: string, index: number): HtmlToken | undefined {
+  if (text[index] !== '&') {
+    return undefined;
+  }
+
+  const closingIndex = text.indexOf(';', index + 1);
+  if (closingIndex === -1) {
+    return undefined;
+  }
+
+  const value = text.slice(index, closingIndex + 1);
+  if (value.length > 32 || !HTML_ENTITY_PATTERN.test(value)) {
+    return undefined;
+  }
+
+  return {
+    kind: 'entity',
+    value,
+  };
+}
+
+function extractHtmlTagName(value: string): string | undefined {
+  const match = /^([a-z][a-z0-9-]*)/i.exec(value.trim());
+  return match?.[1].toLowerCase();
+}
+
+function updateOpenTags(openTags: HtmlOpenTag[], token: HtmlToken): HtmlOpenTag[] {
+  if (token.kind !== 'tag' || !token.tagName) {
+    return openTags;
+  }
+
+  if (token.tagKind === 'open') {
+    return [
+      ...openTags,
+      {
+        name: token.tagName,
+        value: token.value,
+      },
+    ];
+  }
+
+  if (token.tagKind === 'close' && openTags[openTags.length - 1]?.name === token.tagName) {
+    return openTags.slice(0, -1);
+  }
+
+  return openTags;
+}
+
+function buildOpeningTags(openTags: HtmlOpenTag[]): string {
+  return openTags.map((tag) => tag.value).join('');
+}
+
+function buildClosingTags(openTags: HtmlOpenTag[]): string {
+  return [...openTags]
+    .reverse()
+    .map((tag) => `</${tag.name}>`)
+    .join('');
 }
 
 interface RequestTimeoutContext {

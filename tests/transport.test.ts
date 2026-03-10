@@ -137,6 +137,10 @@ function expectSingleRequest(recorder: Recorder): RecordedRequest {
   return recorder.requests[0];
 }
 
+function stripHtmlTags(value: string): string {
+  return value.replace(/<[^>]+>/g, '');
+}
+
 describe('pino-telegram transport', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -418,6 +422,76 @@ describe('pino-telegram transport', () => {
     expect(payload.text).toContain('User Data');
     expect(payload.text).toContain('Timestamp');
     expect(payload.text).not.toContain('Context');
+  });
+
+  it('truncates default HTML output without breaking entities, pre blocks, or notice markup', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        maxMessageLength: 220,
+      },
+      recorder,
+    );
+
+    stream.write(
+      `${JSON.stringify({
+        level: 30,
+        msg: 'Header <tag>\nSecond line',
+        context: {
+          payload:
+            'line 1\n' +
+            'line 2 with <escaped> content\n' +
+            'line 3 with <escaped> content\n' +
+            'line 4 with <escaped> content\n' +
+            'line 5 with <escaped> content',
+        },
+        time: 1700000000000,
+      })}\n`,
+    );
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
+    expect(payload.text.length).toBeLessThanOrEqual(220);
+    expect(payload.text).toContain('Header &lt;tag&gt;<br/>Second line');
+    expect(payload.text).toContain('<pre>');
+    expect(payload.text).toContain('</pre>');
+    expect(payload.text).toContain('<b>Сообщение обрезано из-за ограничения Telegram</b>');
+    expect(payload.text).not.toContain('&lt...');
+    expect(payload.text).not.toContain('<pr...');
+    expect(payload.text).not.toContain('</b...</pre>');
+  });
+
+  it('splits a long text message into ordered HTML-safe parts when splitLongMessages enabled', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        splitLongMessages: true,
+        maxMessageLength: 18,
+        formatMessage: async () => ({
+          text: '<b>ABCDEFGHIJKLMNOPQRSTUVWXYZ</b>',
+        }),
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Split me' })}\n`);
+    stream.end();
+
+    await flush();
+    await vi.waitFor(() => {
+      expect(recorder.requests).toHaveLength(3);
+    });
+
+    const parts = recorder.requests.map(
+      (request) => (request.payload as TelegramMessagePayload).text,
+    );
+    expect(parts).toEqual(['<b>ABCDEFGHIJK</b>', '<b>LMNOPQRSTUV</b>', '<b>WXYZ</b>']);
+    expect(parts.every((part) => part.length <= 18)).toBe(true);
+    expect(parts.join('')).not.toContain('...');
+    expect(parts.map(stripHtmlTags).join('')).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
   });
 
   it('supports sendPhoto via кастомный форматтер', async () => {
@@ -739,6 +813,66 @@ describe('pino-telegram transport', () => {
 
     expect(recorder.requests).toHaveLength(2);
     expect(recorder.timestamps[1] - recorder.timestamps[0]).toBeGreaterThanOrEqual(200);
+  });
+
+  it('applies rate limit between split message parts', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        splitLongMessages: true,
+        maxMessageLength: 18,
+        minDelayBetweenMessages: 200,
+        formatMessage: async () => ({
+          text: '<b>ABCDEFGHIJKLMNOPQRSTUVWXYZ</b>',
+        }),
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Split with delay' })}\n`);
+    stream.end();
+
+    await vi.advanceTimersByTimeAsync(400);
+    await flush();
+    await flush();
+    vi.useRealTimers();
+
+    expect(recorder.requests).toHaveLength(3);
+    expect(recorder.timestamps[1] - recorder.timestamps[0]).toBeGreaterThanOrEqual(200);
+    expect(recorder.timestamps[2] - recorder.timestamps[1]).toBeGreaterThanOrEqual(200);
+  });
+
+  it('does not split media captions when splitLongMessages enabled', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        splitLongMessages: true,
+        maxMessageLength: 25,
+        formatMessage: async () => ({
+          text: '<b>ABCDEFGHIJKLMNOPQRSTUVWXYZ</b>',
+          method: 'sendPhoto',
+          extra: {
+            photo: 'https://example.com/image.png',
+          },
+        }),
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Photo caption' })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const request = expectSingleRequest(recorder);
+    expect(request.method).toBe('sendPhoto');
+    const payload = request.payload as TelegramPhotoPayload;
+    expect(payload.caption).toContain('...');
+    expect(payload.caption?.length).toBeLessThanOrEqual(25);
   });
 
   it('drops the oldest queued log when overflowStrategy=dropOldest', async () => {

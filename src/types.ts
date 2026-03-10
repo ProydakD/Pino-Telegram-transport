@@ -87,6 +87,8 @@ export interface TelegramTransportOptions {
   redactKeys?: string[];
   /** Максимальная длина текстового сообщения. */
   maxMessageLength?: number;
+  /** Разбивать ли длинные текстовые сообщения на несколько частей вместо truncation. */
+  splitLongMessages?: boolean;
   /** Минимальный интервал между сообщениями в одном чате (мс). */
   minDelayBetweenMessages?: number;
   /** Минимальный уровень логов для отправки (число или название уровня Pino). */
@@ -162,6 +164,7 @@ export interface NormalizedOptions {
   extraKeys?: string[];
   redactKeys: string[];
   maxMessageLength: number;
+  splitLongMessages: boolean;
   minDelayBetweenMessages: number;
   minLevel: number;
   maxQueueSize: number;

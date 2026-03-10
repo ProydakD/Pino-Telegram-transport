@@ -2,7 +2,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { Writable } from 'node:stream';
 import { buildMessage } from './formatter';
 import { RateLimiter, TaskQueue } from './rate-limiter';
-import { normalizeOptions } from './utils';
+import { normalizeOptions, splitHtml, splitText } from './utils';
 import {
   FormatMessageInput,
   FormatMessageResult,
@@ -207,21 +207,25 @@ export default function telegramTransport(options: TelegramTransportOptions) {
    */
   async function processLog(log: PinoLog): Promise<void> {
     for (const target of normalized.targets) {
-      await rateLimiter.wait(getTargetKey(target.chatId), normalized.minDelayBetweenMessages);
       const message = await buildMessage({ log, target, options: normalized }, normalized);
-      let request: TelegramRequest;
+      let requests: TelegramRequest[];
 
       try {
-        request = buildRequest(target, message);
+        requests = buildRequests(target, message);
       } catch (error) {
         handleError(error);
         continue;
       }
 
-      try {
-        await client.send(request);
-      } catch (error) {
-        handleError(error, request);
+      for (const request of requests) {
+        await rateLimiter.wait(getTargetKey(target.chatId), normalized.minDelayBetweenMessages);
+
+        try {
+          await client.send(request);
+        } catch (error) {
+          handleError(error, request);
+          break;
+        }
       }
     }
   }
@@ -259,20 +263,32 @@ export default function telegramTransport(options: TelegramTransportOptions) {
    * @param message Результат работы форматтера, содержащий текст и дополнительные поля.
    * @returns Готовый Telegram-запрос с выбранным методом и полезной нагрузкой.
    */
-  function buildRequest(target: TelegramChatTarget, message: FormatMessageResult): TelegramRequest {
+  function buildRequests(
+    target: TelegramChatTarget,
+    message: FormatMessageResult,
+  ): TelegramRequest[] {
     const method: TelegramMethod = message.method ?? 'sendMessage';
     const base = createBasePayload(target);
     const extra = { ...(message.extra ?? {}) } as Record<string, unknown>;
 
     switch (method) {
       case 'sendMessage': {
-        const payload: TelegramMessagePayload = {
-          ...base,
-          text: message.text,
-          disable_web_page_preview: normalized.disableWebPagePreview,
-        };
-        Object.assign(payload, extra);
-        return { method, payload };
+        const parseMode = resolveMessageParseMode(extra);
+        const textParts =
+          normalized.splitLongMessages && message.text.length > normalized.maxMessageLength
+            ? splitMessageText(message.text, normalized.maxMessageLength, parseMode)
+            : [message.text];
+
+        return textParts.map((part) => {
+          const payload: TelegramMessagePayload = {
+            ...base,
+            text: part,
+            disable_web_page_preview: normalized.disableWebPagePreview,
+          };
+          Object.assign(payload, extra);
+          payload.text = part;
+          return { method, payload };
+        });
       }
       case 'sendPhoto': {
         const media = normalizeMediaValue(extra.photo, 'photo');
@@ -288,7 +304,7 @@ export default function telegramTransport(options: TelegramTransportOptions) {
           caption,
         };
         Object.assign(payload, extra);
-        return { method, payload };
+        return [{ method, payload }];
       }
       case 'sendDocument': {
         const media = normalizeMediaValue(extra.document, 'document');
@@ -304,7 +320,7 @@ export default function telegramTransport(options: TelegramTransportOptions) {
           caption,
         };
         Object.assign(payload, extra);
-        return { method, payload };
+        return [{ method, payload }];
       }
       default:
         throw new Error(`Неизвестный метод Telegram: ${String(method)}`);
@@ -327,6 +343,27 @@ export default function telegramTransport(options: TelegramTransportOptions) {
       base.message_thread_id = target.threadId;
     }
     return base;
+  }
+
+  function resolveMessageParseMode(
+    extra: Record<string, unknown>,
+  ): TelegramBasePayload['parse_mode'] {
+    const parseMode = extra.parse_mode;
+    if (parseMode === 'HTML' || parseMode === 'Markdown' || parseMode === 'MarkdownV2') {
+      return parseMode;
+    }
+    return normalized.parseMode;
+  }
+
+  function splitMessageText(
+    text: string,
+    maxLength: number,
+    parseMode: TelegramBasePayload['parse_mode'],
+  ): string[] {
+    if (parseMode === 'HTML') {
+      return splitHtml(text, maxLength);
+    }
+    return splitText(text, maxLength);
   }
 }
 

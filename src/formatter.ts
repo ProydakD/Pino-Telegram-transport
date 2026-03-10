@@ -1,4 +1,10 @@
-import { escapeHtml, formatTimestamp, redactSensitiveData, truncate } from './utils';
+import {
+  escapeHtml,
+  formatTimestamp,
+  redactSensitiveData,
+  truncateHtml,
+  truncateText,
+} from './utils';
 import { FormatMessageInput, FormatMessageResult, NormalizedOptions, PinoLog } from './types';
 
 const LEVEL_LABELS: Record<number, string> = {
@@ -36,7 +42,12 @@ export async function buildMessage(
   const result = options.formatMessage
     ? await options.formatMessage(input)
     : buildDefaultMessage(input, options);
-  return ensureMaxLength(result, options.maxMessageLength);
+
+  if ((result.method ?? 'sendMessage') === 'sendMessage' && options.splitLongMessages) {
+    return result;
+  }
+
+  return ensureMaxLength(result, options.maxMessageLength, options.parseMode);
 }
 
 /**
@@ -204,15 +215,30 @@ function extractExtras(
  *
  * @param result Результат форматтера.
  * @param maxLength Максимальная длина, допустимая Telegram.
+ * @param parseMode Режим разметки, определяющий безопасный способ усечения и notice.
  * @returns Обновлённый результат с учётом ограничений длины.
  */
-function ensureMaxLength(result: FormatMessageResult, maxLength: number): FormatMessageResult {
+function ensureMaxLength(
+  result: FormatMessageResult,
+  maxLength: number,
+  parseMode: NormalizedOptions['parseMode'],
+): FormatMessageResult {
   const { text, extra, method } = result;
+  const truncate = parseMode === 'HTML' ? truncateHtml : truncateText;
   const { text: trimmed, truncated } = truncate(text, maxLength);
   if (!truncated) {
     return { text: trimmed, extra, method };
   }
-  const notice = `\n\n<b>Сообщение обрезано из-за ограничения Telegram</b>`;
-  const { text: finalText } = truncate(trimmed + notice, maxLength);
-  return { text: finalText, extra, method };
+
+  const notice =
+    parseMode === 'HTML'
+      ? `\n\n<b>Сообщение обрезано из-за ограничения Telegram</b>`
+      : `\n\n[Сообщение обрезано из-за ограничения Telegram]`;
+
+  if (notice.length >= maxLength) {
+    return { text: trimmed, extra, method };
+  }
+
+  const { text: finalText } = truncate(text, maxLength - notice.length);
+  return { text: `${finalText}${notice}`, extra, method };
 }

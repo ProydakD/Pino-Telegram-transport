@@ -180,6 +180,7 @@ logger.error(
 ```
 
 Telegram limits media captions to 1024 characters — keep that in mind when building `text` or `caption`.
+Enable `splitLongMessages` for long text logs when you want the full message delivered as multiple parts.
 For `Buffer` payloads use `{ type: 'Buffer', data: number[] }` objects produced by Pino. See `examples/media.ts` for a working reference.
 
 ## Custom `send` implementation

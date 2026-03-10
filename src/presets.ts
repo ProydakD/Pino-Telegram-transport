@@ -1,6 +1,6 @@
 import { buildDefaultMessage } from './formatter';
 import { FormatMessageInput, FormatMessageResult, TelegramInputFile } from './types';
-import { truncate } from './utils';
+import { truncateHtml } from './utils';
 
 export interface MediaFormatterOptions {
   /** Ключ, указывающий тип сообщения (text/photo/document). */
@@ -249,6 +249,6 @@ function truncateCaption(text: string, limit: number): string {
   if (text.length <= limit) {
     return text;
   }
-  const { text: truncated } = truncate(text, limit);
+  const { text: truncated } = truncateHtml(text, limit);
   return truncated;
 }

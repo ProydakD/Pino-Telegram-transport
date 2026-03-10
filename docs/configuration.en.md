@@ -18,6 +18,7 @@ English version · [Русская версия](configuration.ru.md)
 | `extraKeys`               | `string[]`                                                                           | —                                                                        | Whitelists fields that appear in `Extras`.                                               |
 | `redactKeys`              | `string[]`                                                                           | `['token', 'password', 'secret', 'authorization', 'cookie', 'apiKey']`   | Redacts sensitive keys inside the `Context`, `Error`, and `Extras` blocks. An empty array disables the default redaction list. |
 | `maxMessageLength`        | `number`                                                                             | `4096`                                                                   | Maximum text length. Remember the 1024-character caption limit for media.                |
+| `splitLongMessages`       | `boolean`                                                                            | `false`                                                                  | Splits long text messages into multiple HTML-safe parts. Media captions still use truncation. |
 | `minDelayBetweenMessages` | `number`                                                                             | `100`                                                                    | Minimum delay (ms) between messages for the same chat.                                   |
 | `minLevel`                | `number \| 'trace' \| 'debug' \| 'info' \| 'warn' \| 'error' \| 'fatal' \| 'silent'` | `0`                                                                      | Skips records below the threshold. Accepts numeric values and standard Pino level names. |
 | `maxQueueSize`            | `number`                                                                             | `1000`                                                                   | Maximum number of pending tasks in the in-memory delivery queue. Minimum value is `1`.   |
@@ -36,7 +37,8 @@ English version · [Русская версия](configuration.ru.md)
 ## Default Formatter
 
 - Uses level emojis (`🔍`, `🐛`, `ℹ️`, `⚠️`, `❗️`, `💀`) and block headings.
-- Truncates the message according to `maxMessageLength`.
+- Truncates the message according to `maxMessageLength` without breaking HTML tags or entities.
+- With `splitLongMessages: true`, long `sendMessage` payloads are delivered as multiple parts instead of truncation.
 - Escapes HTML via `escapeHtml` to keep the markup safe.
 
 ## Media Formatter
