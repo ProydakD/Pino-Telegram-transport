@@ -19,6 +19,7 @@ English version · [Русская версия](configuration.ru.md)
 | `redactKeys`              | `string[]`                                                                           | `['token', 'password', 'secret', 'authorization', 'cookie', 'apiKey']`   | Redacts sensitive keys inside the `Context`, `Error`, and `Extras` blocks. An empty array disables the default redaction list. |
 | `maxMessageLength`        | `number`                                                                             | `4096`                                                                   | Maximum text length. Remember the 1024-character caption limit for media.                |
 | `splitLongMessages`       | `boolean`                                                                            | `false`                                                                  | Splits long text messages into multiple HTML-safe parts. Media captions still use truncation. |
+| `dedupWindowMs`           | `number`                                                                             | `0`                                                                      | Suppresses repeated `sendMessage` events inside a time window. Matching is scoped by target and log content without the top-level `time` field. |
 | `minDelayBetweenMessages` | `number`                                                                             | `100`                                                                    | Minimum delay (ms) between messages for the same chat.                                   |
 | `minLevel`                | `number \| 'trace' \| 'debug' \| 'info' \| 'warn' \| 'error' \| 'fatal' \| 'silent'` | `0`                                                                      | Global baseline threshold for the transport. Use `target.minLevel` for stricter per-destination routing. |
 | `maxQueueSize`            | `number`                                                                             | `1000`                                                                   | Maximum number of pending tasks in the in-memory delivery queue. Minimum value is `1`.   |
@@ -40,6 +41,7 @@ English version · [Русская версия](configuration.ru.md)
 - Uses level emojis (`🔍`, `🐛`, `ℹ️`, `⚠️`, `❗️`, `💀`) and block headings.
 - Truncates the message according to `maxMessageLength` without breaking HTML tags or entities.
 - With `splitLongMessages: true`, long `sendMessage` payloads are delivered as multiple parts instead of truncation.
+- With `dedupWindowMs > 0`, repeated text events for the same target are suppressed inside the configured window.
 - Escapes HTML via `escapeHtml` to keep the markup safe.
 - The `verbose` preset matches the existing detailed default renderer and keeps separate `Time`, `Context`, `Error`, and `Extras` blocks.
 - The `compact` preset emits a short `LEVEL + time + message` line and collapses `Context`, `Error`, and `Extras` into compact JSON blocks.
@@ -67,6 +69,7 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 - Slow requests are aborted after `requestTimeoutMs` milliseconds (`10000` by default).
 - The in-memory delivery queue is capped by `maxQueueSize` (`1000` tasks by default).
 - Queue overflow follows `overflowStrategy`: `dropOldest`, `dropNewest`, or `block`.
+- Deduplication applies only to `sendMessage`; an entry is added to the dedup cache only after all message parts are delivered successfully.
 - Configuration errors disable the transport and print a warning by default; `failOnInitError: true` switches this behaviour to throwing.
 - Responses `429` and `5xx` trigger exponential retry logic.
 - Built-in client timeouts are treated as temporary failures and are retried as well.

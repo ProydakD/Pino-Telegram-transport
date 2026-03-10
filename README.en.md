@@ -10,6 +10,7 @@ A transport for [Pino](https://github.com/pinojs/pino) that forwards structured 
 - Stay within Telegram limits with configurable delays and retry policies.
 - Bound the in-memory delivery queue and choose an overflow strategy.
 - Drop low-severity records with a configurable minLevel.
+- Suppress repeated text events with `dedupWindowMs`.
 - Redact sensitive keys in the `Context`, `Error`, and `Extras` sections.
 - Split long text messages into multiple parts with `splitLongMessages`.
 - Format outgoing messages with the built-in HTML formatter or a custom one.

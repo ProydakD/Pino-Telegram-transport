@@ -1137,6 +1137,131 @@ describe('pino-telegram transport', () => {
     expect(payload.caption?.length).toBeLessThanOrEqual(25);
   });
 
+  it('suppresses identical text logs inside dedup window even when only time differs', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        dedupWindowMs: 1000,
+        minDelayBetweenMessages: 0,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Dedup event', time: 1700000000000 })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Dedup event', time: 1700000001000 })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    expect(recorder.requests).toHaveLength(1);
+    const payload = recorder.requests[0].payload as TelegramMessagePayload;
+    expect(payload.text).toContain('Dedup event');
+  });
+
+  it('delivers identical text logs again after dedup window expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        dedupWindowMs: 1000,
+        minDelayBetweenMessages: 0,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Window expired', time: 1700000000000 })}\n`);
+
+    await flush();
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(1001);
+    await vi.runOnlyPendingTimersAsync();
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Window expired', time: 1700000001000 })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    expect(recorder.requests).toHaveLength(2);
+    expect((recorder.requests[0].payload as TelegramMessagePayload).text).toContain(
+      'Window expired',
+    );
+    expect((recorder.requests[1].payload as TelegramMessagePayload).text).toContain(
+      'Window expired',
+    );
+  });
+
+  it('keeps dedup state isolated per target', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        dedupWindowMs: 1000,
+        minDelayBetweenMessages: 0,
+        chatId: ['chat_A', 'chat_B'],
+        send: recorder.send,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Target isolated', time: 1700000000000 })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    expect(recorder.requests).toHaveLength(2);
+    expect((recorder.requests[0].payload as TelegramMessagePayload).chat_id).toBe('chat_A');
+    expect((recorder.requests[1].payload as TelegramMessagePayload).chat_id).toBe('chat_B');
+  });
+
+  it('suppresses duplicate text logs after successful retry delivery', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    const recorder = createRecorder();
+    const originalSend = recorder.send;
+    let shouldFailOnce = true;
+    recorder.send = vi.fn(async (payload, method) => {
+      if (shouldFailOnce) {
+        shouldFailOnce = false;
+        throw new TelegramDeliveryError('Retry once', { ok: false, error_code: 500 }, 500);
+      }
+      await originalSend(payload, method);
+    });
+
+    const { stream } = createTransport(
+      {
+        dedupWindowMs: 1000,
+        minDelayBetweenMessages: 0,
+        retryAttempts: 2,
+        retryInitialDelay: 200,
+        retryBackoffFactor: 1,
+        retryMaxDelay: 200,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Retry dedup', time: 1700000000000 })}\n`);
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Retry dedup', time: 1700000001000 })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(200);
+    await vi.runOnlyPendingTimersAsync();
+    await flush();
+    await flush();
+
+    expect(recorder.send).toHaveBeenCalledTimes(2);
+    expect(recorder.requests).toHaveLength(1);
+    expect((recorder.requests[0].payload as TelegramMessagePayload).text).toContain('Retry dedup');
+  });
+
   it('drops the oldest queued log when overflowStrategy=dropOldest', async () => {
     const recorder = createRecorder();
     const controlledSend = createControlledSend(recorder);

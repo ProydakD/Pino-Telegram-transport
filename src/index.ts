@@ -2,6 +2,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { Writable } from 'node:stream';
 import { buildMessage } from './formatter';
 import { RateLimiter, TaskQueue } from './rate-limiter';
+import { createTextMessageDedupKey, TextMessageDeduper } from './text-message-deduper';
 import { normalizeOptions, splitHtml, splitText } from './utils';
 import {
   FormatMessageInput,
@@ -77,6 +78,7 @@ export default function telegramTransport(options: TelegramTransportOptions) {
 
   const client = new TelegramClient(normalized);
   const rateLimiter = new RateLimiter();
+  const deduper = new TextMessageDeduper({ windowMs: normalized.dedupWindowMs });
   const queue = new TaskQueue({
     maxSize: normalized.maxQueueSize,
     overflowStrategy: normalized.overflowStrategy,
@@ -223,6 +225,12 @@ export default function telegramTransport(options: TelegramTransportOptions) {
         continue;
       }
 
+      const dedupKey = createTextMessageDedupKey(log, target, requests);
+      if (deduper.shouldSuppress(dedupKey)) {
+        continue;
+      }
+
+      let deliveredAllRequests = true;
       for (const request of requests) {
         await rateLimiter.wait(getTargetKey(target.chatId), normalized.minDelayBetweenMessages);
 
@@ -230,8 +238,13 @@ export default function telegramTransport(options: TelegramTransportOptions) {
           await client.send(request);
         } catch (error) {
           handleError(error, request);
+          deliveredAllRequests = false;
           break;
         }
+      }
+
+      if (deliveredAllRequests) {
+        deduper.remember(dedupKey);
       }
     }
   }

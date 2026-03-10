@@ -27,6 +27,7 @@ const DEFAULT_RETRY_MAX_DELAY = 10000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_MAX_QUEUE_SIZE = 1000;
 const DEFAULT_OVERFLOW_STRATEGY: TelegramQueueOverflowStrategy = 'dropOldest';
+const DEFAULT_DEDUP_WINDOW_MS = 0;
 const TRUNCATION_SUFFIX = '...';
 const HTML_VOID_TAGS = new Set(['br']);
 const HTML_ENTITY_PATTERN = /^&(?:#\d+|#x[\da-f]+|[a-z][a-z0-9]+);$/i;
@@ -99,6 +100,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
   const requestTimeoutMs = normalizeRequestTimeoutMs(options.requestTimeoutMs);
   const maxQueueSize = normalizeMaxQueueSize(options.maxQueueSize);
   const overflowStrategy = normalizeOverflowStrategy(options.overflowStrategy);
+  const dedupWindowMs = normalizeDedupWindowMs(options.dedupWindowMs);
   const redactKeys = normalizeRedactKeys(options.redactKeys);
   const formatPreset = normalizeFormatPreset(options.formatPreset);
 
@@ -115,6 +117,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     redactKeys,
     maxMessageLength: options.maxMessageLength ?? DEFAULT_MAX_LENGTH,
     splitLongMessages: options.splitLongMessages ?? false,
+    dedupWindowMs,
     minDelayBetweenMessages: options.minDelayBetweenMessages ?? DEFAULT_MIN_DELAY,
     minLevel,
     maxQueueSize,
@@ -269,6 +272,19 @@ function normalizeMaxQueueSize(value: TelegramTransportOptions['maxQueueSize']):
     throw new Error('maxQueueSize должен быть конечным числом');
   }
   return Math.max(1, Math.trunc(value));
+}
+
+function normalizeDedupWindowMs(value: TelegramTransportOptions['dedupWindowMs']): number {
+  if (value === undefined || value === null) {
+    return DEFAULT_DEDUP_WINDOW_MS;
+  }
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    throw new Error('dedupWindowMs должен быть числом');
+  }
+  if (!Number.isFinite(value)) {
+    throw new Error('dedupWindowMs должен быть конечным числом');
+  }
+  return Math.max(0, Math.trunc(value));
 }
 
 function normalizeOverflowStrategy(

@@ -92,6 +92,8 @@ export interface TelegramTransportOptions {
   maxMessageLength?: number;
   /** Разбивать ли длинные текстовые сообщения на несколько частей вместо truncation. */
   splitLongMessages?: boolean;
+  /** Окно подавления одинаковых текстовых сообщений (мс). 0 отключает dedup. */
+  dedupWindowMs?: number;
   /** Минимальный интервал между сообщениями в одном чате (мс). */
   minDelayBetweenMessages?: number;
   /** Минимальный уровень логов для отправки (число или название уровня Pino). */
@@ -174,6 +176,7 @@ export interface NormalizedOptions {
   redactKeys: string[];
   maxMessageLength: number;
   splitLongMessages: boolean;
+  dedupWindowMs: number;
   minDelayBetweenMessages: number;
   minLevel: number;
   maxQueueSize: number;

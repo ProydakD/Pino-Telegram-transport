@@ -243,6 +243,25 @@ Telegram limits media captions to 1024 characters — keep that in mind when bui
 Enable `splitLongMessages` for long text logs when you want the full message delivered as multiple parts.
 For `Buffer` payloads use `{ type: 'Buffer', data: number[] }` objects produced by Pino. See `examples/media.ts` for a working reference.
 
+## Duplicate suppression
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      dedupWindowMs: 30_000,
+    },
+  },
+});
+```
+
+- `dedupWindowMs` suppresses repeated `sendMessage` events inside the configured window.
+- Matching is scoped by target and log content without the top-level `time`, so recurring records are not re-sent just because they have a fresh timestamp.
+- An entry is added to the dedup cache only after successful delivery. If a message retries and still fails, the next identical record is not suppressed by mistake.
+
 ## Custom `send` implementation
 
 ```ts
