@@ -455,7 +455,7 @@ describe('pino-telegram transport', () => {
 
     const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
     expect(payload.text.length).toBeLessThanOrEqual(220);
-    expect(payload.text).toContain('Header &lt;tag&gt;<br/>Second line');
+    expect(payload.text).toContain('Header &lt;tag&gt;\nSecond line');
     expect(payload.text).toContain('<pre>');
     expect(payload.text).toContain('</pre>');
     expect(payload.text).toContain('<b>Сообщение обрезано из-за ограничения Telegram</b>');
@@ -890,9 +890,13 @@ describe('pino-telegram transport', () => {
       recorder,
     );
 
-    stream.write(`${JSON.stringify({ level: 30, msg: 'First queued' })}\n`);
-    stream.write(`${JSON.stringify({ level: 30, msg: 'Second queued' })}\n`);
-    stream.write(`${JSON.stringify({ level: 30, msg: 'Third queued' })}\n`);
+    stream.write(
+      [
+        JSON.stringify({ level: 30, msg: 'First queued' }),
+        JSON.stringify({ level: 30, msg: 'Second queued' }),
+        JSON.stringify({ level: 30, msg: 'Third queued' }),
+      ].join('\n') + '\n',
+    );
     stream.end();
 
     await vi.waitFor(() => {
@@ -936,9 +940,13 @@ describe('pino-telegram transport', () => {
       recorder,
     );
 
-    stream.write(`${JSON.stringify({ level: 30, msg: 'First queued' })}\n`);
-    stream.write(`${JSON.stringify({ level: 30, msg: 'Second queued' })}\n`);
-    stream.write(`${JSON.stringify({ level: 30, msg: 'Third queued' })}\n`);
+    stream.write(
+      [
+        JSON.stringify({ level: 30, msg: 'First queued' }),
+        JSON.stringify({ level: 30, msg: 'Second queued' }),
+        JSON.stringify({ level: 30, msg: 'Third queued' }),
+      ].join('\n') + '\n',
+    );
     stream.end();
 
     await vi.waitFor(() => {

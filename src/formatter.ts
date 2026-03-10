@@ -114,7 +114,7 @@ function resolveLevel(level?: number): string {
  * @returns Подготовленная строка для отправки в Telegram.
  */
 function sanitizeMessage(message: string): string {
-  return escapeHtml(message).replace(/\r?\n/g, '<br/>');
+  return escapeHtml(message);
 }
 
 /**

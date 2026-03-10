@@ -141,8 +141,14 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
 
     const lines = extractLines(flushRemainder);
+
+    const pendingLineTasks: Promise<void>[] = [];
     for (const line of lines) {
-      await processLine(line);
+      pendingLineTasks.push(processLine(line));
+    }
+
+    if (pendingLineTasks.length > 0) {
+      await Promise.all(pendingLineTasks);
     }
   }
 
@@ -181,11 +187,7 @@ export default function telegramTransport(options: TelegramTransportOptions) {
       await processLog(log);
     });
 
-    void queuedTask.done.catch((error) => {
-      handleError(error);
-    });
-
-    await queuedTask.ready;
+    await queuedTask.done;
   }
 
   async function waitForTransportIdle(): Promise<void> {
