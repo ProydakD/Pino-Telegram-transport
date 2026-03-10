@@ -320,13 +320,16 @@ export function truncate(text: string, maxLength: number): { text: string; trunc
  * @returns Строка в формате ISO 8601.
  */
 export function formatTimestamp(time?: number | string): string {
-  if (!time) {
+  if (time === undefined) {
     return new Date().toISOString();
   }
-  if (typeof time === 'string') {
-    return new Date(time).toISOString();
+
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) {
+    return typeof time === 'string' ? time : String(time);
   }
-  return new Date(time).toISOString();
+
+  return date.toISOString();
 }
 
 /**

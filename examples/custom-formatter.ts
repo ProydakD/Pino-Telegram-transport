@@ -5,7 +5,7 @@ import telegramTransport, {
 } from 'pino-telegram-logger-transport';
 
 function formatAsMarkdownV2({ log }: FormatMessageInput): FormatMessageResult {
-  const timestamp = new Date(log.time ?? Date.now()).toISOString();
+  const timestamp = formatExampleTimestamp(log.time);
   const lines = [
     `*${escapeMarkdown(log.msg ?? 'Message is missing')}*`,
     `_Time:_ ${escapeMarkdown(timestamp)}`,
@@ -27,8 +27,21 @@ function formatAsMarkdownV2({ log }: FormatMessageInput): FormatMessageResult {
   };
 }
 
+function formatExampleTimestamp(time?: number | string): string {
+  if (time === undefined) {
+    return new Date().toISOString();
+  }
+
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) {
+    return typeof time === 'string' ? time : String(time);
+  }
+
+  return date.toISOString();
+}
+
 function escapeMarkdown(value: string): string {
-  return value.replace(/[\\_\-\*\[\]()~`>#+=|{}.!]/g, (symbol) => `\\${symbol}`);
+  return value.replace(/[\\_\-*[\]()~`>#+=|{}.!]/g, (symbol) => `\\${symbol}`);
 }
 
 async function main() {
