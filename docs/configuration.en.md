@@ -29,6 +29,7 @@ English version · [Русская версия](configuration.ru.md)
 | `retryBackoffFactor`      | `number`                                                                             | `2`                                                                      | Exponential backoff multiplier.                                                          |
 | `retryMaxDelay`           | `number`                                                                             | `10000`                                                                  | Maximum delay (ms) between attempts.                                                     |
 | `requestTimeoutMs`        | `number`                                                                             | `10000`                                                                  | HTTP timeout for Telegram requests in milliseconds. Set `0` to disable the built-in timeout. |
+| `formatPreset`            | `'default' \| 'compact'`                                                             | `'default'`                                                              | Selects a built-in formatter preset. Prefer it over callback formatters for `transport.target`. |
 | `formatMessage`           | `FormatMessageFn`                                                                    | `createMediaFormatter()`                                                 | Custom message formatter.                                                                |
 | `onDeliveryError`         | `(error, payload?, method?) => void`                                                 | —                                                                        | Delivery error handler.                                                                  |
 | `send`                    | `(payload, method) => Promise<void>`                                                 | —                                                                        | Custom delivery implementation instead of the built-in HTTP client.                      |
@@ -40,6 +41,7 @@ English version · [Русская версия](configuration.ru.md)
 - Truncates the message according to `maxMessageLength` without breaking HTML tags or entities.
 - With `splitLongMessages: true`, long `sendMessage` payloads are delivered as multiple parts instead of truncation.
 - Escapes HTML via `escapeHtml` to keep the markup safe.
+- The `compact` preset emits a short `LEVEL + time + message` line and collapses `Context`, `Error`, and `Extras` into compact JSON blocks.
 - For `parseMode: 'HTML'`, use only tags supported by the Telegram Bot API: `b/strong`, `i/em`, `u/ins`, `s/strike/del`, `a`, `code`, `pre`, nested `pre` + `code class="language-..."`, `blockquote` (including `expandable`), `tg-spoiler`, `tg-emoji`.
 - Named HTML entities in the Bot API are limited to `&lt;`, `&gt;`, `&amp;`, and `&quot;`; the transport also encodes apostrophes as `&#39;`.
 

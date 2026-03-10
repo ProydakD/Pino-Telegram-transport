@@ -2,6 +2,7 @@
 
 export type TelegramMethod = 'sendMessage' | 'sendPhoto' | 'sendDocument';
 export type TelegramQueueOverflowStrategy = 'dropOldest' | 'dropNewest' | 'block';
+export type TelegramFormatPreset = 'default' | 'compact';
 
 export type PinoLevelName = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
 
@@ -114,6 +115,8 @@ export interface TelegramTransportOptions {
   send?: (payload: TelegramSendPayload, method: TelegramMethod) => Promise<void>;
   /** Кастомные заголовки для форматтера по умолчанию. */
   headings?: Partial<FormatterHeadings>;
+  /** Встроенный пресет форматирования для transport.target и простых сценариев. */
+  formatPreset?: TelegramFormatPreset;
   /** Количество попыток доставки (включая первую). */
   retryAttempts?: number;
   /** Стартовая пауза перед повторной попыткой (мс). */

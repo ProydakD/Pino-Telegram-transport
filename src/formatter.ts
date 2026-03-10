@@ -95,6 +95,49 @@ export function buildDefaultMessage(
 }
 
 /**
+ * Формирует компактное сообщение в одну основную строку и короткие JSON-блоки без verbose-разметки.
+ *
+ * @param input Данные о логе и назначении сообщения.
+ * @param options Нормализованные опции транспорта.
+ * @returns Сообщение с коротким заголовком и дополнительными компактными блоками.
+ */
+export function buildCompactMessage(
+  input: FormatMessageInput,
+  options: NormalizedOptions,
+): FormatMessageResult {
+  const { log } = input;
+  const levelLabel = resolveLevel(log.level);
+  const levelIcon = LEVEL_ICONS[levelLabel] ?? '';
+  const timestamp = formatTimestamp(log.time);
+  const message = sanitizeMessage(log.msg ?? 'Message is missing');
+  const headings = options.headings;
+
+  const header = `${levelIcon ? `${levelIcon} ` : ''}${levelLabel} ${escapeHtml(timestamp)} ${message}`;
+  const parts: string[] = [header];
+
+  const context = extractContext(log, options);
+  if (context) {
+    parts.push(
+      formatCompactBlock(headings.context, redactSensitiveData(context, options.redactKeys)),
+    );
+  }
+
+  const errorBlock = formatCompactError(log, headings, options);
+  if (errorBlock) {
+    parts.push(errorBlock);
+  }
+
+  const extras = extractExtras(log, options);
+  if (extras) {
+    parts.push(
+      formatCompactBlock(headings.extras, redactSensitiveData(extras, options.redactKeys)),
+    );
+  }
+
+  return { text: parts.join('\n'), extra: {} };
+}
+
+/**
  * Преобразует числовой уровень pino в строковый ярлык.
  *
  * @param level Числовой уровень логирования.
@@ -148,6 +191,12 @@ function formatContextBlock(title: string, value: unknown): string {
   return `<b>${escapeHtml(title)}:</b>\n<pre>${rendered}</pre>`;
 }
 
+function formatCompactBlock(title: string, value: unknown): string {
+  const rendered = JSON.stringify(value);
+  const safeValue = escapeHtml(rendered ?? 'null');
+  return `<pre>${escapeHtml(title)}=${safeValue}</pre>`;
+}
+
 /**
  * Собирает информацию об ошибке из поля err записи pino.
  *
@@ -170,6 +219,22 @@ function formatError(
     stack: err.stack,
   };
   return formatContextBlock(headings.error, redactSensitiveData(payload, options.redactKeys));
+}
+
+function formatCompactError(
+  log: PinoLog,
+  headings: NormalizedOptions['headings'],
+  options: NormalizedOptions,
+): string | undefined {
+  const err = log.err as Record<string, unknown> | undefined;
+  if (!err) {
+    return undefined;
+  }
+  const payload = {
+    message: err.message,
+    stack: err.stack,
+  };
+  return formatCompactBlock(headings.error, redactSensitiveData(payload, options.redactKeys));
 }
 
 /**

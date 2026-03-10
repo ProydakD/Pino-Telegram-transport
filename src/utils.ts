@@ -3,10 +3,11 @@
   NormalizedTelegramChatTarget,
   RawChatTarget,
   TelegramChatTarget,
+  TelegramFormatPreset,
   TelegramQueueOverflowStrategy,
   TelegramTransportOptions,
 } from './types';
-import { createMediaFormatter } from './presets';
+import { createCompactFormatter, createMediaFormatter } from './presets';
 
 const TELEGRAM_BASE_URL = 'https://api.telegram.org';
 const DEFAULT_CONTEXT_KEYS = ['context', 'ctx'];
@@ -99,6 +100,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
   const maxQueueSize = normalizeMaxQueueSize(options.maxQueueSize);
   const overflowStrategy = normalizeOverflowStrategy(options.overflowStrategy);
   const redactKeys = normalizeRedactKeys(options.redactKeys);
+  const formatPreset = normalizeFormatPreset(options.formatPreset);
 
   return {
     botToken,
@@ -122,7 +124,9 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     retryBackoffFactor,
     retryMaxDelay,
     requestTimeoutMs,
-    formatMessage: options.formatMessage || createMediaFormatter(),
+    formatMessage:
+      options.formatMessage ??
+      (formatPreset === 'compact' ? createCompactFormatter() : createMediaFormatter()),
     onDeliveryError: options.onDeliveryError,
     send: options.send,
     headings: {
@@ -279,6 +283,18 @@ function normalizeOverflowStrategy(
     return value;
   }
   throw new Error('Неизвестная стратегия переполнения очереди: ' + String(value));
+}
+
+function normalizeFormatPreset(
+  value: TelegramTransportOptions['formatPreset'],
+): TelegramFormatPreset {
+  if (value === undefined || value === null) {
+    return 'default';
+  }
+  if (value === 'default' || value === 'compact') {
+    return value;
+  }
+  throw new Error('Неизвестный встроенный пресет форматирования: ' + String(value));
 }
 
 function normalizeRedactKeys(value: TelegramTransportOptions['redactKeys']): string[] {

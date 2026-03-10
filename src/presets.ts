@@ -1,5 +1,10 @@
-import { buildDefaultMessage } from './formatter';
-import { FormatMessageInput, FormatMessageResult, TelegramInputFile } from './types';
+import { buildCompactMessage, buildDefaultMessage } from './formatter';
+import {
+  FormatMessageInput,
+  FormatMessageResult,
+  NormalizedOptions,
+  TelegramInputFile,
+} from './types';
 import { truncateHtml } from './utils';
 
 export interface MediaFormatterOptions {
@@ -27,6 +32,11 @@ const DEFAULT_CONTENT_TYPE_KEY = 'mediaContentType';
 const DEFAULT_CAPTION_KEY = 'caption';
 const DEFAULT_CAPTION_LIMIT = 1024;
 
+type BuiltInMessageBuilder = (
+  input: FormatMessageInput,
+  options: NormalizedOptions,
+) => FormatMessageResult;
+
 /**
  * Форматтер, который автоматически выбирает метод Telegram Bot API исходя из описания медиа в логе.
  * Ожидается схема вида: `{ messageType: 'photo' | 'document' | 'text', mediaUrl?, mediaBuffer?, caption? }`.
@@ -35,6 +45,19 @@ const DEFAULT_CAPTION_LIMIT = 1024;
  * @returns Функция форматтера, совместимая с transport.formatMessage.
  */
 export function createMediaFormatter(
+  options: MediaFormatterOptions = {},
+): (input: FormatMessageInput) => Promise<FormatMessageResult> | FormatMessageResult {
+  return createStructuredFormatter(buildDefaultMessage, options);
+}
+
+export function createCompactFormatter(
+  options: MediaFormatterOptions = {},
+): (input: FormatMessageInput) => Promise<FormatMessageResult> | FormatMessageResult {
+  return createStructuredFormatter(buildCompactMessage, options);
+}
+
+function createStructuredFormatter(
+  buildTextMessage: BuiltInMessageBuilder,
   options: MediaFormatterOptions = {},
 ): (input: FormatMessageInput) => Promise<FormatMessageResult> | FormatMessageResult {
   const typeKey = options.typeKey ?? DEFAULT_TYPE_KEY;
@@ -46,7 +69,7 @@ export function createMediaFormatter(
   const captionLimit = options.captionMaxLength ?? DEFAULT_CAPTION_LIMIT;
 
   return (input) => {
-    const base = buildDefaultMessage(input, input.options);
+    const base = buildTextMessage(input, input.options);
     const record = input.log as Record<string, unknown>;
 
     const typeValue = record[typeKey];

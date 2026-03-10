@@ -308,6 +308,84 @@ describe('pino-telegram transport', () => {
     ]);
   });
 
+  it('renders compact preset with compact context, error, and extras blocks', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport({ formatPreset: 'compact' }, recorder);
+
+    stream.write(
+      `${JSON.stringify({
+        level: 50,
+        msg: 'Compact event',
+        time: 1700000000000,
+        context: { requestId: 'req-1' },
+        err: { message: 'Boom', stack: 'stack trace' },
+        foo: 'bar',
+      })}\n`,
+    );
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
+    const text = payload.text;
+
+    expect(stripHtmlTags(text)).toContain('ERROR 2023-11-14T22:13:20.000Z Compact event');
+    expect(text).not.toContain('<b>Time:</b>');
+    expect(text).toContain('<pre>Context={&quot;requestId&quot;:&quot;req-1&quot;}</pre>');
+    expect(text).toContain(
+      '<pre>Error={&quot;message&quot;:&quot;Boom&quot;,&quot;stack&quot;:&quot;stack trace&quot;}</pre>',
+    );
+    expect(text).toContain('<pre>Extras={&quot;foo&quot;:&quot;bar&quot;}</pre>');
+  });
+
+  it('truncates compact preset output when splitLongMessages disabled', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        formatPreset: 'compact',
+        maxMessageLength: 160,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'A'.repeat(600) })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
+    expect(payload.text).not.toContain('<b>Time:</b>');
+    expect(payload.text).toContain('Сообщение обрезано из-за ограничения Telegram');
+  });
+
+  it('splits long compact preset messages without truncation notice', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        formatPreset: 'compact',
+        splitLongMessages: true,
+        minDelayBetweenMessages: 0,
+        maxMessageLength: 180,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Compact split '.repeat(120) })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    expect(recorder.requests.length).toBeGreaterThan(1);
+    for (const request of recorder.requests) {
+      const payload = request.payload as TelegramMessagePayload;
+      expect(payload.text).not.toContain('<b>Time:</b>');
+      expect(payload.text).not.toContain('Сообщение обрезано из-за ограничения Telegram');
+    }
+  });
+
   it('includes user context with default heading', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport({}, recorder);

@@ -65,6 +65,25 @@ const logger = pino({
 - `target.minLevel` adds stricter filtering only for the selected destination.
 - Numeric values and string Pino levels (`'warn'`, `'error'`) work both globally and per target.
 
+## Compact preset
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      formatPreset: 'compact',
+    },
+  },
+});
+```
+
+- `formatPreset: 'compact'` is declarative and safe to use with `transport.target`.
+- The preset shortens the first line and collapses `Context`, `Error`, and `Extras` into compact JSON blocks.
+- If `formatMessage` is provided, the custom callback still takes precedence over `formatPreset`.
+
 ## Creating the transport directly
 
 ```ts

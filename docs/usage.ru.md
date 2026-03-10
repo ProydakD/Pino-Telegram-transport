@@ -65,6 +65,25 @@ const logger = pino({
 - `target.minLevel` добавляет более строгую фильтрацию только для конкретного получателя.
 - Числа и строковые уровни Pino (`'warn'`, `'error'`) поддерживаются и на уровне транспорта, и на уровне target.
 
+## Компактный Пресет
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      chatId,
+      formatPreset: 'compact',
+    },
+  },
+});
+```
+
+- `formatPreset: 'compact'` работает декларативно и подходит для `transport.target`.
+- Пресет делает короче первую строку и сворачивает `Context`, `Error`, `Extras` в компактные JSON-блоки.
+- Если передан `formatMessage`, пользовательский callback имеет приоритет над `formatPreset`.
+
 ## Прямое создание транспорта
 
 ```ts
