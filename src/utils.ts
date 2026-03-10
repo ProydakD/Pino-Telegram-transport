@@ -1,5 +1,6 @@
 ﻿import {
   NormalizedOptions,
+  NormalizedTelegramChatTarget,
   RawChatTarget,
   TelegramChatTarget,
   TelegramQueueOverflowStrategy,
@@ -137,13 +138,13 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
  * @param options Опции транспорта с произвольным описанием chatId.
  * @returns Массив целевых чатов.
  */
-function normalizeTargets(options: TelegramTransportOptions): TelegramChatTarget[] {
+function normalizeTargets(options: TelegramTransportOptions): NormalizedTelegramChatTarget[] {
   const raw = Array.isArray(options.chatId) ? options.chatId : [options.chatId];
   const threadId = coerceThreadId((options as unknown as { threadId?: unknown }).threadId);
 
   return raw
     .map((entry) => normalizeTarget(entry as RawChatTarget, threadId))
-    .filter((target): target is TelegramChatTarget => Boolean(target));
+    .filter((target): target is NormalizedTelegramChatTarget => Boolean(target));
 }
 
 /**
@@ -153,7 +154,10 @@ function normalizeTargets(options: TelegramTransportOptions): TelegramChatTarget
  * @param defaultThread Общая тема по умолчанию.
  * @returns Структура целевого чата или null, если найти chatId не удалось.
  */
-function normalizeTarget(entry: RawChatTarget, defaultThread?: number): TelegramChatTarget | null {
+function normalizeTarget(
+  entry: RawChatTarget,
+  defaultThread?: number,
+): NormalizedTelegramChatTarget | null {
   if (typeof entry === 'number' || typeof entry === 'string') {
     return {
       chatId: entry,
@@ -165,7 +169,10 @@ function normalizeTarget(entry: RawChatTarget, defaultThread?: number): Telegram
     return null;
   }
 
-  const { chatId, threadId } = entry as TelegramChatTarget & { threadId?: unknown };
+  const { chatId, threadId, minLevel } = entry as TelegramChatTarget & {
+    threadId?: unknown;
+    minLevel?: TelegramChatTarget['minLevel'];
+  };
   if (chatId === undefined || chatId === null) {
     return null;
   }
@@ -173,6 +180,7 @@ function normalizeTarget(entry: RawChatTarget, defaultThread?: number): Telegram
   return {
     chatId,
     threadId: coerceThreadId(threadId) ?? defaultThread,
+    minLevel: resolveTargetMinLevel(minLevel),
   };
 }
 
@@ -225,6 +233,14 @@ function resolveMinLevel(level: TelegramTransportOptions['minLevel']): number {
   }
 
   throw new Error('Неизвестный уровень логирования: ' + String(level));
+}
+
+function resolveTargetMinLevel(level: TelegramChatTarget['minLevel']): number | undefined {
+  if (level === undefined || level === null) {
+    return undefined;
+  }
+
+  return resolveMinLevel(level);
 }
 
 function normalizeRequestTimeoutMs(value: TelegramTransportOptions['requestTimeoutMs']): number {

@@ -19,6 +19,8 @@ export interface TelegramChatTarget {
   chatId: ChatIdentifier;
   /** Идентификатор темы в супергруппе. */
   threadId?: number;
+  /** Минимальный уровень логов для конкретного target. */
+  minLevel?: number | PinoLevelName;
 }
 
 export type RawChatTarget = ChatIdentifier | TelegramChatTarget;
@@ -152,9 +154,13 @@ export interface PinoLog {
   [key: string]: unknown;
 }
 
+export interface NormalizedTelegramChatTarget extends Omit<TelegramChatTarget, 'minLevel'> {
+  minLevel?: number;
+}
+
 export interface NormalizedOptions {
   botToken: string;
-  targets: TelegramChatTarget[];
+  targets: NormalizedTelegramChatTarget[];
   parseMode: 'HTML' | 'Markdown' | 'MarkdownV2';
   disableNotification: boolean;
   disableWebPagePreview: boolean;

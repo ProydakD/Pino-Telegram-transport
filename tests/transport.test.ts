@@ -181,6 +181,133 @@ describe('pino-telegram transport', () => {
     expect(payload.text).toContain('Escalated');
   });
 
+  it('routes logs to targets with string minLevel thresholds', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        minDelayBetweenMessages: 0,
+        chatId: [
+          { chatId: 'info-chat' },
+          { chatId: 'warn-chat', minLevel: 'warn' },
+          { chatId: 'error-chat', minLevel: 'error' },
+        ],
+        send: recorder.send,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Info routed' })}\n`);
+    stream.write(`${JSON.stringify({ level: 50, msg: 'Error routed' })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const delivered = recorder.requests.map((request) => ({
+      chatId: (request.payload as TelegramMessagePayload).chat_id,
+      text: stripHtmlTags((request.payload as TelegramMessagePayload).text),
+    }));
+
+    expect(delivered).toEqual([
+      expect.objectContaining({
+        chatId: 'info-chat',
+        text: expect.stringContaining('Info routed'),
+      }),
+      expect.objectContaining({
+        chatId: 'info-chat',
+        text: expect.stringContaining('Error routed'),
+      }),
+      expect.objectContaining({
+        chatId: 'warn-chat',
+        text: expect.stringContaining('Error routed'),
+      }),
+      expect.objectContaining({
+        chatId: 'error-chat',
+        text: expect.stringContaining('Error routed'),
+      }),
+    ]);
+  });
+
+  it('supports numeric minLevel thresholds per target', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        minDelayBetweenMessages: 0,
+        chatId: [{ chatId: 'all-chat' }, { chatId: 'warn-chat', minLevel: 40 }],
+        send: recorder.send,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Info only' })}\n`);
+    stream.write(`${JSON.stringify({ level: 40, msg: 'Warn fanout' })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const delivered = recorder.requests.map((request) => ({
+      chatId: (request.payload as TelegramMessagePayload).chat_id,
+      text: stripHtmlTags((request.payload as TelegramMessagePayload).text),
+    }));
+
+    expect(delivered).toEqual([
+      expect.objectContaining({
+        chatId: 'all-chat',
+        text: expect.stringContaining('Info only'),
+      }),
+      expect.objectContaining({
+        chatId: 'all-chat',
+        text: expect.stringContaining('Warn fanout'),
+      }),
+      expect.objectContaining({
+        chatId: 'warn-chat',
+        text: expect.stringContaining('Warn fanout'),
+      }),
+    ]);
+  });
+
+  it('keeps global minLevel as a baseline for per-target routing', async () => {
+    const recorder = createRecorder();
+    const { stream } = createTransport(
+      {
+        minLevel: 'warn',
+        minDelayBetweenMessages: 0,
+        chatId: [{ chatId: 'warn-chat' }, { chatId: 'error-chat', minLevel: 'error' }],
+        send: recorder.send,
+      },
+      recorder,
+    );
+
+    stream.write(`${JSON.stringify({ level: 30, msg: 'Ignored info' })}\n`);
+    stream.write(`${JSON.stringify({ level: 40, msg: 'Warn routed' })}\n`);
+    stream.write(`${JSON.stringify({ level: 50, msg: 'Error routed' })}\n`);
+    stream.end();
+
+    await flush();
+    await flush();
+
+    const delivered = recorder.requests.map((request) => ({
+      chatId: (request.payload as TelegramMessagePayload).chat_id,
+      text: stripHtmlTags((request.payload as TelegramMessagePayload).text),
+    }));
+
+    expect(delivered).toEqual([
+      expect.objectContaining({
+        chatId: 'warn-chat',
+        text: expect.stringContaining('Warn routed'),
+      }),
+      expect.objectContaining({
+        chatId: 'warn-chat',
+        text: expect.stringContaining('Error routed'),
+      }),
+      expect.objectContaining({
+        chatId: 'error-chat',
+        text: expect.stringContaining('Error routed'),
+      }),
+    ]);
+  });
+
   it('includes user context with default heading', async () => {
     const recorder = createRecorder();
     const { stream } = createTransport({}, recorder);

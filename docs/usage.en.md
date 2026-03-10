@@ -43,6 +43,28 @@ const logger = pino({
 });
 ```
 
+To route by level per destination:
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      minLevel: 'info',
+      chatId: [
+        { chatId: '@app-info' },
+        { chatId: '@app-alerts', minLevel: 'error' },
+      ],
+    },
+  },
+});
+```
+
+- The global `minLevel` remains the baseline threshold for every chat.
+- `target.minLevel` adds stricter filtering only for the selected destination.
+- Numeric values and string Pino levels (`'warn'`, `'error'`) work both globally and per target.
+
 ## Creating the transport directly
 
 ```ts

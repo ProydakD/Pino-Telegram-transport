@@ -209,6 +209,10 @@ export default function telegramTransport(options: TelegramTransportOptions) {
    */
   async function processLog(log: PinoLog): Promise<void> {
     for (const target of normalized.targets) {
+      if (!shouldSendToTarget(log, target)) {
+        continue;
+      }
+
       const message = await buildMessage({ log, target, options: normalized }, normalized);
       let requests: TelegramRequest[];
 
@@ -236,6 +240,18 @@ export default function telegramTransport(options: TelegramTransportOptions) {
       return true;
     }
     return log.level >= normalized.minLevel;
+  }
+
+  function shouldSendToTarget(log: PinoLog, target: TelegramChatTarget): boolean {
+    if (!Number.isFinite(log.level)) {
+      return true;
+    }
+
+    if (typeof target.minLevel !== 'number') {
+      return true;
+    }
+
+    return log.level >= target.minLevel;
   }
 
   /**

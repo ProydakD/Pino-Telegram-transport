@@ -43,6 +43,28 @@ const logger = pino({
 });
 ```
 
+Для маршрутизации по уровню на конкретный target:
+
+```ts
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken,
+      minLevel: 'info',
+      chatId: [
+        { chatId: '@app-info' },
+        { chatId: '@app-alerts', minLevel: 'error' },
+      ],
+    },
+  },
+});
+```
+
+- Глобальный `minLevel` остаётся базовым порогом для всех чатов.
+- `target.minLevel` добавляет более строгую фильтрацию только для конкретного получателя.
+- Числа и строковые уровни Pino (`'warn'`, `'error'`) поддерживаются и на уровне транспорта, и на уровне target.
+
 ## Прямое создание транспорта
 
 ```ts
