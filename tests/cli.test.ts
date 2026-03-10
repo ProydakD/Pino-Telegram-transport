@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
@@ -16,7 +19,10 @@ interface MockContext {
   };
 }
 
-function createContext(env: Record<string, string> = {}): MockContext {
+function createContext(
+  env: Record<string, string> = {},
+  currentWorkingDirectory = '/workdir',
+): MockContext {
   const stdoutMessages: string[] = [];
   const stderrMessages: string[] = [];
   const context = {
@@ -27,7 +33,7 @@ function createContext(env: Record<string, string> = {}): MockContext {
       stderrMessages.push(message);
     },
     env: { ...env } as NodeJS.ProcessEnv,
-    cwd: () => '/workdir',
+    cwd: () => currentWorkingDirectory,
   };
   return { stdoutMessages, stderrMessages, context };
 }
@@ -135,7 +141,7 @@ describe('CLI утилита', () => {
     );
   });
 
-  it('генерирует конфигурацию в JSON', async () => {
+  it('генерирует конфигурацию в JSON с плейсхолдером токена по умолчанию', async () => {
     const { context, stdoutMessages } = createContext();
 
     const exitCode = await runCli(
@@ -145,19 +151,82 @@ describe('CLI утилита', () => {
 
     expect(exitCode).toBe(0);
     expect(stdoutMessages.join('\n')).toContain('pino-telegram-logger-transport');
-    expect(stdoutMessages.join('\n')).toContain('"botToken": "123:ABC"');
+    expect(stdoutMessages.join('\n')).toContain('"botToken": "<YOUR_BOT_TOKEN>"');
+    expect(stdoutMessages.join('\n')).not.toContain('"botToken": "123:ABC"');
   });
 
-  it('генерирует env-конфигурацию с несколькими чатами', async () => {
+  it('включает реальный токен в JSON только по флагу --include-token', async () => {
     const { context, stdoutMessages } = createContext();
 
     const exitCode = await runCli(
-      ['generate-config', '--chat-id', '-100,-200', '--format', 'env'],
+      [
+        'generate-config',
+        '--token',
+        '123:ABC',
+        '--chat-id',
+        '-100',
+        '--thread-id',
+        '777',
+        '--include-token',
+      ],
       context,
     );
 
     expect(exitCode).toBe(0);
+    expect(stdoutMessages.join('\n')).toContain('"botToken": "123:ABC"');
+    expect(stdoutMessages.join('\n')).toContain('"threadId": 777');
+  });
+
+  it('генерирует env-конфигурацию с плейсхолдером токена и threadId', async () => {
+    const { context, stdoutMessages } = createContext({
+      TELEGRAM_BOT_TOKEN: '123:ABC',
+      TELEGRAM_CHAT_ID: '-100,-200',
+      TELEGRAM_THREAD_ID: '777',
+    });
+
+    const exitCode = await runCli(['generate-config', '--format', 'env'], context);
+
+    expect(exitCode).toBe(0);
+    expect(stdoutMessages.join('\n')).toContain('TELEGRAM_BOT_TOKEN=<YOUR_BOT_TOKEN>');
     expect(stdoutMessages.join('\n')).toContain('TELEGRAM_CHAT_ID=-100,-200');
+    expect(stdoutMessages.join('\n')).toContain('TELEGRAM_THREAD_ID=777');
+  });
+
+  it('записывает env-конфигурацию в файл с реальным токеном по --include-token', async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'pino-telegram-cli-'));
+
+    try {
+      const { context, stdoutMessages } = createContext({}, temporaryDirectory);
+
+      const exitCode = await runCli(
+        [
+          'generate-config',
+          '--token',
+          '123:ABC',
+          '--chat-id',
+          '-100',
+          '--thread-id',
+          '777',
+          '--format',
+          'env',
+          '--include-token',
+          '--output',
+          'telegram.env',
+        ],
+        context,
+      );
+
+      const filePath = join(temporaryDirectory, 'telegram.env');
+      const writtenConfig = await readFile(filePath, 'utf8');
+
+      expect(exitCode).toBe(0);
+      expect(stdoutMessages.join('\n')).toContain(`Конфигурация сохранена в ${filePath}`);
+      expect(writtenConfig).toContain('TELEGRAM_BOT_TOKEN=123:ABC');
+      expect(writtenConfig).toContain('TELEGRAM_CHAT_ID=-100');
+      expect(writtenConfig).toContain('TELEGRAM_THREAD_ID=777');
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 
   it('отправляет пробное сообщение в чат по флагу --probe-message', async () => {

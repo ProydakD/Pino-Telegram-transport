@@ -46,6 +46,8 @@ interface TelegramResponse<T> {
 }
 
 const CLI_REQUEST_TIMEOUT_MS = 10000;
+const TOKEN_PLACEHOLDER = '<YOUR_BOT_TOKEN>';
+const CHAT_PLACEHOLDER = '<CHAT_ID>';
 
 /**
  * Специализированное исключение CLI для сохранения HTTP-статуса и кода ошибки Telegram.
@@ -432,10 +434,12 @@ async function handleGenerateConfig(options: CliOptions, context: CliContext): P
     return 1;
   }
 
-  const token = tokenCandidate ?? context.env.TELEGRAM_BOT_TOKEN ?? '<YOUR_BOT_TOKEN>';
+  const includeToken = options.includeToken === true;
+  const sourceToken = tokenCandidate ?? context.env.TELEGRAM_BOT_TOKEN;
+  const token = includeToken && sourceToken ? sourceToken : TOKEN_PLACEHOLDER;
   const chats = parseChatList(chatCandidate ?? context.env.TELEGRAM_CHAT_ID);
   const chatValue: string | string[] =
-    chats.length === 0 ? '<CHAT_ID>' : chats.length === 1 ? chats[0] : chats;
+    chats.length === 0 ? CHAT_PLACEHOLDER : chats.length === 1 ? chats[0] : chats;
 
   const threadCandidate = pickOption(options, ['threadId', 'thread']);
   if (typeof threadCandidate === 'boolean') {
@@ -469,8 +473,8 @@ async function handleGenerateConfig(options: CliOptions, context: CliContext): P
   } else {
     const normalizedChat = Array.isArray(chatValue) ? chatValue.join(',') : chatValue;
     const envLines = [
-      `TELEGRAM_BOT_TOKEN=${token === '<YOUR_BOT_TOKEN>' ? '' : token}`,
-      `TELEGRAM_CHAT_ID=${normalizedChat === '<CHAT_ID>' ? '' : normalizedChat}`,
+      `TELEGRAM_BOT_TOKEN=${token}`,
+      `TELEGRAM_CHAT_ID=${normalizedChat === CHAT_PLACEHOLDER ? '' : normalizedChat}`,
     ];
     if (parsedThread.value !== undefined) {
       envLines.push(`TELEGRAM_THREAD_ID=${parsedThread.value}`);
@@ -709,7 +713,7 @@ function printHelp(context: CliContext): void {
     '',
     'Использование:',
     '  pino-telegram-cli check --token <token> [--chat-id <id>] [--thread-id <id>] [--probe-message]',
-    '  pino-telegram-cli generate-config [--token <token>] [--chat-id <id>[,<id>]] [--format json|env] [--output <файл>]',
+    '  pino-telegram-cli generate-config [--token <token>] [--chat-id <id>[,<id>]] [--format json|env] [--include-token] [--output <файл>]',
     '',
     'Позиционные параметры:',
     '  check <token> [chatId] [threadId]              Быстрый ввод токена и идентификаторов',
@@ -721,12 +725,14 @@ function printHelp(context: CliContext): void {
     '  --thread-id, --thread          Идентификатор темы (message_thread_id) или TELEGRAM_THREAD_ID',
     '  --probe-message                Отправить и удалить тестовое сообщение для проверки прав отправки',
     '  --format                       Формат вывода: json (по умолчанию) или env',
+    '  --include-token                Включить реальный токен в generate-config вместо плейсхолдера',
     '  --output <путь>                Сохранить результат в файл вместо вывода в консоль',
     '  --help, -h                     Показать справку',
     '',
     'Примеры:',
     '  pino-telegram-cli check --token 123:ABC --chat-id -1001234567890',
     '  pino-telegram-cli check --token 123:ABC --chat-id -1001234567890 --thread-id 777 --probe-message',
+    '  pino-telegram-cli generate-config --token 123:ABC --chat-id -1001234567890 --include-token',
     '  pino-telegram-cli generate-config --token 123:ABC --chat-id -1001,-1002 --format env',
   ];
   for (const line of lines) {

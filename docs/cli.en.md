@@ -33,6 +33,8 @@ pino-telegram-cli check --token 123:ABC --chat-id -1001234567890 --thread-id 777
 ## Generate configuration
 
 - Produce a JSON snippet with `pino-telegram-cli generate-config --token <token> --chat-id <id>`.
+- By default, the CLI writes the `<YOUR_BOT_TOKEN>` placeholder even if the real token comes from a flag or the environment.
+- Add `--include-token` only when you explicitly want the real token in the JSON or `.env` output.
 - Switch to `.env` format with `--format env` to append variables to your environment file.
 - Provide `--output path/to/file` to write the result instead of printing it to stdout.
 - Combine `--chat-id` with several recipients (comma-separated) to emit an array in the JSON output.
@@ -42,6 +44,10 @@ pino-telegram-cli check --token 123:ABC --chat-id -1001234567890 --thread-id 777
 
 ```bash
 pino-telegram-cli generate-config --token 123:ABC --chat-id -1001234567890 --format env --output .env.telegram
+```
+
+```bash
+pino-telegram-cli generate-config --token 123:ABC --chat-id -1001234567890 --include-token
 ```
 
 ## Exit codes

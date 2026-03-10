@@ -33,6 +33,8 @@ pino-telegram-cli check --token 123:ABC --chat-id -1001234567890 --thread-id 777
 ## Сгенерируйте Конфигурацию
 
 - Получите JSON-фрагмент командой `pino-telegram-cli generate-config --token <token> --chat-id <id>`.
+- По умолчанию CLI подставляет в вывод плейсхолдер `<YOUR_BOT_TOKEN>`, даже если токен передан через флаг или окружение.
+- Добавьте `--include-token`, только если нужно явно записать реальный токен в JSON или `.env`.
 - Выберите формат `.env` через `--format env`, чтобы дополнить файл окружения.
 - Укажите `--output путь/к/файлу`, чтобы записать результат вместо вывода в консоль.
 - Перечислите несколько получателей через запятую, чтобы в JSON появилась коллекция чатов.
@@ -42,6 +44,10 @@ pino-telegram-cli check --token 123:ABC --chat-id -1001234567890 --thread-id 777
 
 ```bash
 pino-telegram-cli generate-config --token 123:ABC --chat-id -1001234567890 --format env --output .env.telegram
+```
+
+```bash
+pino-telegram-cli generate-config --token 123:ABC --chat-id -1001234567890 --include-token
 ```
 
 ## Коды Возврата
