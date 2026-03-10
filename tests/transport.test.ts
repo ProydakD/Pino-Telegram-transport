@@ -291,13 +291,13 @@ describe('pino-telegram transport', () => {
 
     const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
     expect(payload.text).toContain('Header token=visible');
-    expect(payload.text).toContain('"token": "[REDACTED]"');
-    expect(payload.text).toContain('"password": "[REDACTED]"');
-    expect(payload.text).toContain('"authorization": "[REDACTED]"');
-    expect(payload.text).toContain('"apiKey": "[REDACTED]"');
-    expect(payload.text).toContain('"cookie": "[REDACTED]"');
-    expect(payload.text).toContain('"keep": "context-visible"');
-    expect(payload.text).toContain('"keep": true');
+    expect(payload.text).toContain('&quot;token&quot;: &quot;[REDACTED]&quot;');
+    expect(payload.text).toContain('&quot;password&quot;: &quot;[REDACTED]&quot;');
+    expect(payload.text).toContain('&quot;authorization&quot;: &quot;[REDACTED]&quot;');
+    expect(payload.text).toContain('&quot;apiKey&quot;: &quot;[REDACTED]&quot;');
+    expect(payload.text).toContain('&quot;cookie&quot;: &quot;[REDACTED]&quot;');
+    expect(payload.text).toContain('&quot;keep&quot;: &quot;context-visible&quot;');
+    expect(payload.text).toContain('&quot;keep&quot;: true');
     expect(log).toEqual(originalLog);
   });
 
@@ -330,10 +330,12 @@ describe('pino-telegram transport', () => {
     await flush();
 
     const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
-    expect(payload.text).toContain('"token": "ctx-token"');
-    expect(payload.text).toContain('"sessionId": "[REDACTED]"');
-    expect(payload.text).toContain('"message": "[REDACTED]"');
-    expect(payload.text).toContain('"stack": "stack trace should stay visible"');
+    expect(payload.text).toContain('&quot;token&quot;: &quot;ctx-token&quot;');
+    expect(payload.text).toContain('&quot;sessionId&quot;: &quot;[REDACTED]&quot;');
+    expect(payload.text).toContain('&quot;message&quot;: &quot;[REDACTED]&quot;');
+    expect(payload.text).toContain(
+      '&quot;stack&quot;: &quot;stack trace should stay visible&quot;',
+    );
     expect(log.context.sessionId).toBe('ctx-session');
     expect(log.err.message).toBe('error message should be hidden');
   });
@@ -361,8 +363,8 @@ describe('pino-telegram transport', () => {
     await flush();
 
     const payload = expectSingleRequest(recorder).payload as TelegramMessagePayload;
-    expect(payload.text).toContain('"token": "ctx-token"');
-    expect(payload.text).toContain('"apiKey": "extra-api-key"');
+    expect(payload.text).toContain('&quot;token&quot;: &quot;ctx-token&quot;');
+    expect(payload.text).toContain('&quot;apiKey&quot;: &quot;extra-api-key&quot;');
     expect(payload.text).not.toContain('[REDACTED]');
   });
 

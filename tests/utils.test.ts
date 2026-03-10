@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { formatTimestamp, splitHtml, splitText, truncateHtml } from '../src/utils';
+import { escapeHtml, formatTimestamp, splitHtml, splitText, truncateHtml } from '../src/utils';
 
 describe('formatTimestamp', () => {
   it('returns the original string for an invalid date string', () => {
@@ -62,5 +62,13 @@ describe('splitHtml', () => {
       '<b>FGHIJ</b>',
       '<b>KL</b>',
     ]);
+  });
+});
+
+describe('escapeHtml', () => {
+  it('escapes HTML-significant characters and quotes for Telegram HTML mode', () => {
+    expect(escapeHtml(`<tag attr="value">'quoted' & text`)).toBe(
+      '&lt;tag attr=&quot;value&quot;&gt;&#39;quoted&#39; &amp; text',
+    );
   });
 });

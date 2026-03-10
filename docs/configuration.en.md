@@ -40,6 +40,8 @@ English version · [Русская версия](configuration.ru.md)
 - Truncates the message according to `maxMessageLength` without breaking HTML tags or entities.
 - With `splitLongMessages: true`, long `sendMessage` payloads are delivered as multiple parts instead of truncation.
 - Escapes HTML via `escapeHtml` to keep the markup safe.
+- For `parseMode: 'HTML'`, use only tags supported by the Telegram Bot API: `b/strong`, `i/em`, `u/ins`, `s/strike/del`, `a`, `code`, `pre`, nested `pre` + `code class="language-..."`, `blockquote` (including `expandable`), `tg-spoiler`, `tg-emoji`.
+- Named HTML entities in the Bot API are limited to `&lt;`, `&gt;`, `&amp;`, and `&quot;`; the transport also encodes apostrophes as `&#39;`.
 
 ## Media Formatter
 

@@ -40,6 +40,8 @@
 - Ограничивает длину сообщения параметром `maxMessageLength`, не разрывая HTML-теги и entities.
 - При `splitLongMessages: true` длинные `sendMessage`-сообщения отправляются несколькими частями вместо truncation.
 - Применяет `escapeHtml` для безопасной вставки HTML.
+- Для `parseMode: 'HTML'` используйте только теги, поддерживаемые Telegram Bot API: `b/strong`, `i/em`, `u/ins`, `s/strike/del`, `a`, `code`, `pre`, вложенный `pre` + `code class="language-..."`, `blockquote` (в том числе `expandable`), `tg-spoiler`, `tg-emoji`.
+- Именованные HTML entities в Bot API ограничены `&lt;`, `&gt;`, `&amp;`, `&quot;`; транспорт дополнительно кодирует апостроф как `&#39;`.
 
 ## Форматтер Медиа
 

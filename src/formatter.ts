@@ -108,7 +108,7 @@ function resolveLevel(level?: number): string {
 }
 
 /**
- * Экранирует HTML и заменяет переводы строк, чтобы текст безопасно отображался в Telegram.
+ * Экранирует HTML, чтобы текст безопасно отображался в Telegram.
  *
  * @param message Исходное сообщение лога.
  * @returns Подготовленная строка для отправки в Telegram.
