@@ -252,6 +252,7 @@ export const handler = async (event: unknown) => {
 - [Examples](docs/examples.en.md)
 - [FAQ](docs/faq.en.md)
 - [CLI reference](docs/cli.en.md)
+- [Report a bug or request a feature](https://github.com/ProydakD/pino-telegram-transport/issues)
 
 ## License
 
