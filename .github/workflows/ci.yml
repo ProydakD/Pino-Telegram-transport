@@ -61,6 +61,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build package
+        run: npm run build
+
       - name: Run supported compatibility check
         if: ${{ !(matrix.node == '18' && matrix.pino == '10') }}
         run: npm run test:compat:pino${{ matrix.pino }}
