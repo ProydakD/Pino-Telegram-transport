@@ -1,19 +1,79 @@
-﻿# Pino Telegram transport
+# Pino Telegram transport
+
+[![npm version](https://img.shields.io/npm/v/pino-telegram-logger-transport?logo=npm)](https://www.npmjs.com/package/pino-telegram-logger-transport)
+[![npm downloads](https://img.shields.io/npm/dm/pino-telegram-logger-transport?logo=npm)](https://www.npmjs.com/package/pino-telegram-logger-transport)
+[![Node.js >=18](https://img.shields.io/node/v/pino-telegram-logger-transport)](https://www.npmjs.com/package/pino-telegram-logger-transport)
+[![License: MIT](https://img.shields.io/npm/l/pino-telegram-logger-transport)](https://www.npmjs.com/package/pino-telegram-logger-transport)
 
 English version · [Русская версия](README.ru.md)
 
 A transport for [Pino](https://github.com/pinojs/pino) that forwards structured logs to the Telegram Bot API, supports media attachments, and ships ready-made adapters for NestJS, Fastify, and AWS Lambda. Private chats, supergroups, topics, and media uploads are supported out of the box.
 
+## What's New
+
+Recent releases focused on three areas: safer delivery, safer formatting, and lower-noise operations.
+
+### Delivery and runtime hardening
+
+- Node.js 18 support now matches the actual runtime behavior, without a direct runtime dependency on `undici`.
+- Slow Bot API calls are bounded with `requestTimeoutMs`, and timeout failures can be retried.
+- `logger.flush(callback)` now waits for the real delivery pipeline, including retries and split text messages.
+- `maxQueueSize` and `overflowStrategy` keep the in-memory queue bounded when Telegram slows down.
+- `failOnInitError` adds a fail-fast startup mode for production deployments.
+
+### Safer formatting and message delivery
+
+- `redactKeys` masks sensitive values inside the built-in `Context`, `Error`, and `Extras` blocks.
+- Invalid `time` values no longer crash the formatter.
+- HTML truncation is Telegram-safe and no longer breaks tags or entities.
+- `splitLongMessages` can send long text logs as ordered parts instead of cutting them off.
+- HTML escaping now matches Telegram Bot API constraints more closely.
+
+### Better routing, CLI, and signal-to-noise ratio
+
+- Each target can define its own `minLevel`, so errors and warnings can go to different chats.
+- Built-in `formatPreset: 'compact' | 'verbose'` makes it easier to switch between dense operational logs and more detailed output.
+- `dedupWindowMs` suppresses repeated text events inside a configurable time window.
+- `pino-telegram-cli check --probe-message` verifies real send permissions, not just chat visibility.
+- `pino-telegram-cli generate-config --include-token` keeps generated configs safe by default.
+- CI and prerelease checks now cover Node.js `18/20/24` and `pino@9/10`.
+
+### Example: production-friendly transport config
+
+```typescript
+import pino from 'pino';
+
+const logger = pino({
+  transport: {
+    target: 'pino-telegram-logger-transport',
+    options: {
+      botToken: process.env.TELEGRAM_BOT_TOKEN!,
+      chatId: [
+        { chatId: process.env.TELEGRAM_ALERTS_CHAT_ID!, minLevel: 'error' },
+        { chatId: process.env.TELEGRAM_WARNINGS_CHAT_ID!, minLevel: 'warn' },
+      ],
+      requestTimeoutMs: 10_000,
+      maxQueueSize: 1_000,
+      overflowStrategy: 'dropOldest',
+      failOnInitError: true,
+      splitLongMessages: true,
+      formatPreset: 'compact',
+      dedupWindowMs: 30_000,
+    },
+  },
+});
+```
+
 ## Key Features
 
 - Deliver messages to multiple chats and topics while keeping the original order.
+- Route different severity levels to different chats with global and per-target `minLevel`.
 - Stay within Telegram limits with configurable delays and retry policies.
 - Bound the in-memory delivery queue and choose an overflow strategy.
-- Drop low-severity records with a configurable minLevel.
 - Suppress repeated text events with `dedupWindowMs`.
 - Redact sensitive keys in the `Context`, `Error`, and `Extras` sections.
 - Split long text messages into multiple parts with `splitLongMessages`.
-- Format outgoing messages with the built-in HTML formatter or a custom one.
+- Choose between built-in `compact` and `verbose` presets or provide a custom formatter.
 - Send text, photos, or documents with a single transport.
 - Override the delivery method with a custom `send` function in direct-stream mode.
 - Validate credentials and scaffold configs with the built-in CLI.
@@ -89,7 +149,7 @@ logger.warn({
 
 By default the formatter looks for `messageType` (`text`/`photo`/`document`), `mediaUrl`, `mediaBuffer`, `mediaFilename`, `mediaContentType`, and `caption`.
 Binary payloads can be provided as `Buffer`, `Uint8Array`, `ArrayBuffer`, or `{ type: 'Buffer', data: number[] }` objects.
-Telegram limits media captions to 1024 characters — keep `caption` within that budget.
+Telegram limits media captions to 1024 characters, so keep `caption` within that budget.
 
 ## Custom Headings
 
@@ -124,7 +184,7 @@ async function sendToQueue(payload: TelegramSendPayload, method: TelegramMethod)
 }
 ```
 
-The `send` option receives the payload and the selected method. Legacy handlers that expect a single argument remain compatible — the second argument will be ignored.
+The `send` option receives the payload and the selected method. Legacy handlers that expect a single argument remain compatible: the second argument will be ignored.
 Pass `send`, `formatMessage`, and `onDeliveryError` only through direct transport creation (`const stream = telegramTransport(options); const logger = pino({}, stream);`).
 The `transport.target` mode serializes options and should be treated as serializable-only.
 
