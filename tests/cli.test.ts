@@ -160,7 +160,75 @@ describe('CLI утилита', () => {
     expect(stdoutMessages.join('\n')).toContain('TELEGRAM_CHAT_ID=-100,-200');
   });
 
-  it('проверяет тему форума', async () => {
+  it('отправляет пробное сообщение в чат по флагу --probe-message', async () => {
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: 1, first_name: 'TestBot', username: 'test_bot' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: -100, type: 'supergroup', title: 'Logs' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { message_id: 42 },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: true,
+      }),
+    );
+
+    const { context, stdoutMessages, stderrMessages } = createContext();
+
+    const exitCode = await runCli(
+      ['check', '--token', '123:ABC', '--chat-id', '-100', '--probe-message'],
+      context,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('/sendMessage?');
+    expect(
+      stdoutMessages.some((line) => line.includes('Пробное сообщение отправлено в чат -100')),
+    ).toBe(true);
+    expect(stderrMessages.some((line) => line.includes('Не удалось удалить'))).toBe(false);
+  });
+
+  it('не отправляет пробное сообщение в тему без --probe-message', async () => {
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: 1, first_name: 'TestBot', username: 'test_bot' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: -100, type: 'supergroup', title: 'Logs', is_forum: true },
+      }),
+    );
+
+    const { context, stdoutMessages } = createContext();
+
+    const exitCode = await runCli(
+      ['check', '--token', '123:ABC', '--chat-id', '-100', '--thread-id', '777'],
+      context,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(stdoutMessages.some((line) => line.includes('Добавьте --probe-message'))).toBe(true);
+  });
+
+  it('проверяет отправку пробного сообщения в тему форума', async () => {
     fetchMock.mockResolvedValueOnce(
       createResponse({
         ok: true,
@@ -186,16 +254,82 @@ describe('CLI утилита', () => {
       }),
     );
 
-    const { context, stdoutMessages, stderrMessages } = createContext();
+    const { context, stdoutMessages } = createContext();
 
     const exitCode = await runCli(
-      ['check', '--token', '123:ABC', '--chat-id', '-100', '--thread-id', '777'],
+      ['check', '--token', '123:ABC', '--chat-id', '-100', '--thread-id', '777', '--probe-message'],
       context,
     );
 
     expect(exitCode).toBe(0);
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(stdoutMessages.some((line) => line.includes('Тема доступна'))).toBe(true);
-    expect(stderrMessages.some((line) => line.includes('Не удалось удалить'))).toBe(false);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('message_thread_id=777');
+    expect(
+      stdoutMessages.some((line) =>
+        line.includes('Пробное сообщение отправлено в тему 777 в чате -100'),
+      ),
+    ).toBe(true);
+  });
+
+  it('сообщает об ошибке отправки пробного сообщения', async () => {
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: 1, first_name: 'TestBot', username: 'test_bot' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: -100, type: 'supergroup', title: 'Logs' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({ ok: false, description: 'Forbidden', error_code: 403 }, 403),
+    );
+
+    const { context, stderrMessages } = createContext();
+
+    const exitCode = await runCli(
+      ['check', '--token', '123:ABC', '--chat-id', '-100', '--probe-message'],
+      context,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(stderrMessages.join('\n')).toContain('Не удалось отправить пробное сообщение');
+  });
+
+  it('предупреждает, если не удалось удалить пробное сообщение', async () => {
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: 1, first_name: 'TestBot', username: 'test_bot' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { id: -100, type: 'supergroup', title: 'Logs' },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({
+        ok: true,
+        result: { message_id: 42 },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      createResponse({ ok: false, description: 'Message cannot be deleted', error_code: 400 }, 400),
+    );
+
+    const { context, stderrMessages } = createContext();
+
+    const exitCode = await runCli(
+      ['check', '--token', '123:ABC', '--chat-id', '-100', '--probe-message'],
+      context,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderrMessages.join('\n')).toContain('Не удалось удалить контрольное сообщение');
   });
 });

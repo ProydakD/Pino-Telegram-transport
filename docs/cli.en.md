@@ -13,8 +13,9 @@ The bundled command line utility helps you validate Telegram credentials before 
 
 - Run `pino-telegram-cli check --token <token>` to verify that the bot token is accepted by Telegram.
 - Pass `--chat-id <id>` (comma-separated for multiple chats) to ensure the bot can access each destination.
-- Supply `--thread-id <id>` along with a single chat to confirm that a forum topic is reachable.
-- Let the CLI send a muted probe message to that topic (it deletes the message right away) to verify access.
+- Supply `--thread-id <id>` along with a single chat to target a specific forum topic.
+- Add `--probe-message` when you need to verify real send permissions: the CLI sends a muted test message and immediately tries to delete it.
+- Without `--probe-message`, `check` stays read-only: it validates the token and chats via the Bot API, but does not publish anything.
 - Omit explicit flags if you export `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_THREAD_ID` in the environment.
 - CLI network requests time out after 10 seconds so the check cannot hang forever.
 - Expect a non-zero exit code if Telegram rejects the token, chat, or thread.
@@ -23,6 +24,10 @@ The bundled command line utility helps you validate Telegram credentials before 
 
 ```bash
 pino-telegram-cli check --token 123:ABC --chat-id -1001234567890
+```
+
+```bash
+pino-telegram-cli check --token 123:ABC --chat-id -1001234567890 --thread-id 777 --probe-message
 ```
 
 ## Generate configuration

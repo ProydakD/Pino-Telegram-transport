@@ -297,12 +297,14 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
 
   const chats = parseChatList(chatCandidate ?? context.env.TELEGRAM_CHAT_ID);
   let hasFailures = false;
+  const reachableChats: string[] = [];
 
   for (const chatId of chats) {
     context.stdout(`Проверка чата ${chatId}…`);
     try {
       const chat = await callTelegram<ChatInfo>(token, 'getChat', { chat_id: chatId });
       context.stdout(`✅ Чат доступен: ${formatChat(chat)}`);
+      reachableChats.push(chatId);
     } catch (error) {
       hasFailures = true;
       context.stderr(formatTelegramError(`❌ Не удалось проверить чат ${chatId}`, error));
@@ -321,25 +323,53 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
     return 1;
   }
 
-  if (parsedThread.value !== undefined) {
-    if (chats.length !== 1) {
-      context.stderr('Для проверки темы укажите ровно один чат.');
-      return 1;
-    }
-    const chatId = chats[0];
-    context.stdout(`Проверка темы ${parsedThread.value} в чате ${chatId}…`);
+  const shouldProbeMessage = options.probeMessage === true;
+
+  if (parsedThread.value !== undefined && chats.length !== 1) {
+    context.stderr('Для проверки темы укажите ровно один чат.');
+    return 1;
+  }
+
+  if (shouldProbeMessage && chats.length === 0) {
+    context.stderr(
+      'Для проверки отправки укажите хотя бы один чат через --chat-id или TELEGRAM_CHAT_ID.',
+    );
+    return 1;
+  }
+
+  if (parsedThread.value !== undefined && !shouldProbeMessage) {
+    context.stdout(
+      `ℹ️ Тема ${parsedThread.value} не проверялась без отправки сообщения. Добавьте --probe-message для проверки прав отправки.`,
+    );
+  }
+
+  if (!shouldProbeMessage) {
+    return hasFailures ? 1 : 0;
+  }
+
+  for (const chatId of reachableChats) {
+    const probeDescription =
+      parsedThread.value !== undefined
+        ? `тему ${parsedThread.value} в чате ${chatId}`
+        : `чат ${chatId}`;
+
+    context.stdout(`Проверка отправки пробного сообщения в ${probeDescription}…`);
     try {
       const probe = await callTelegram<SentMessage>(token, 'sendMessage', {
         chat_id: chatId,
         message_thread_id: parsedThread.value,
-        text: 'pino-telegram-cli thread probe',
+        text:
+          parsedThread.value !== undefined
+            ? `pino-telegram-cli topic probe ${parsedThread.value}`
+            : 'pino-telegram-cli chat probe',
         disable_notification: true,
       });
       await attemptDeleteMessage(token, chatId, probe.message_id, context);
-      context.stdout(`✅ Тема доступна: ID ${parsedThread.value}`);
+      context.stdout(`✅ Пробное сообщение отправлено в ${probeDescription}`);
     } catch (error) {
-      context.stderr(formatTelegramError('❌ Не удалось проверить тему', error));
-      return 1;
+      hasFailures = true;
+      const probeErrorMessage = `❌ Не удалось отправить пробное сообщение в ${probeDescription}`;
+      context.stderr(formatTelegramError(probeErrorMessage, error));
     }
   }
 
@@ -678,7 +708,7 @@ function printHelp(context: CliContext): void {
     'pino-telegram-cli — утилита для проверки Telegram Bot API и генерации конфигурации транспорта.',
     '',
     'Использование:',
-    '  pino-telegram-cli check --token <token> [--chat-id <id>] [--thread-id <id>]',
+    '  pino-telegram-cli check --token <token> [--chat-id <id>] [--thread-id <id>] [--probe-message]',
     '  pino-telegram-cli generate-config [--token <token>] [--chat-id <id>[,<id>]] [--format json|env] [--output <файл>]',
     '',
     'Позиционные параметры:',
@@ -689,12 +719,14 @@ function printHelp(context: CliContext): void {
     '  --token, --bot-token           Токен бота (или TELEGRAM_BOT_TOKEN)',
     '  --chat-id, --chat              Идентификатор чата/чатов (через запятую) или TELEGRAM_CHAT_ID',
     '  --thread-id, --thread          Идентификатор темы (message_thread_id) или TELEGRAM_THREAD_ID',
+    '  --probe-message                Отправить и удалить тестовое сообщение для проверки прав отправки',
     '  --format                       Формат вывода: json (по умолчанию) или env',
     '  --output <путь>                Сохранить результат в файл вместо вывода в консоль',
     '  --help, -h                     Показать справку',
     '',
     'Примеры:',
     '  pino-telegram-cli check --token 123:ABC --chat-id -1001234567890',
+    '  pino-telegram-cli check --token 123:ABC --chat-id -1001234567890 --thread-id 777 --probe-message',
     '  pino-telegram-cli generate-config --token 123:ABC --chat-id -1001,-1002 --format env',
   ];
   for (const line of lines) {
