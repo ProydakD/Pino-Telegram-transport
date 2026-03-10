@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quality:
+    name: Quality / Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '24']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build package
+        run: npm run build
+
+  compat:
+    name: Compat / Node ${{ matrix.node }} / pino@${{ matrix.pino }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '24']
+        pino: ['9', '10']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run supported compatibility check
+        if: ${{ !(matrix.node == '18' && matrix.pino == '10') }}
+        run: npm run test:compat:pino${{ matrix.pino }}
+
+      - name: Verify Node 18 rejects pino@10 compat check
+        if: ${{ matrix.node == '18' && matrix.pino == '10' }}
+        shell: bash
+        run: |
+          if npm run test:compat:pino10; then
+            echo "Expected Node.js 18 + pino@10 compatibility check to fail."
+            exit 1
+          fi

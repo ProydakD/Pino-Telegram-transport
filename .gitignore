@@ -32,6 +32,9 @@ logs/
 # Misc
 .tmp/
 .*/
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
 
 # Technical
 *.md
