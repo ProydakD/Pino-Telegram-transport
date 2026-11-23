@@ -123,6 +123,16 @@ test('temporary API failures retry through the same proxy', async (t) => {
   assert.equal(proxy.targets.length, 3);
 });
 
+test('SOCKS5 accepts a bracketed IPv6 proxy address', async (t) => {
+  const api = await startApi(t);
+  const proxy = await startSocks(t, api.port, 'socks5h', false);
+  const ipv6 = new URL(proxy.url);
+  ipv6.hostname = '[::ffff:127.0.0.1]';
+  checkExit(await run(api, ipv6.href, [sender, 'direct']), 0);
+  assert.equal(proxy.targets.length, 1);
+  assert.equal(api.requests.length, 1);
+});
+
 for (const protocol of ['http', 'socks5h']) {
   test(`${protocol}: bad credentials never reach the API or diagnostics`, async (t) => {
     const api = await startApi(t);

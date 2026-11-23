@@ -465,6 +465,7 @@ describe('pino-telegram transport', () => {
     ['https://t.me/proxy?server=localhost&secret=fixture-password', undefined],
     ['http://user:fixture-password@localhost:70000', undefined],
     ['socks5://user:%ZZfixture-password@localhost', undefined],
+    ['socks5://%00:1080', undefined],
     ['', undefined],
     ['http://user:fixture-password@localhost', vi.fn()],
   ] as const)(

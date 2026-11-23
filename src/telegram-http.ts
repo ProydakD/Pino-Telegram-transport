@@ -2,6 +2,7 @@ import dns from 'node:dns';
 import { request } from 'node:https';
 import { Writable } from 'node:stream';
 import { text } from 'node:stream/consumers';
+import { domainToASCII } from 'node:url';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
@@ -29,6 +30,12 @@ export function parseProxyUrl(value: unknown): URL | undefined {
       // Оба агента декодируют userinfo. Ошибка escape-последовательности — ошибка настройки.
       decodeURIComponent(url.username);
       decodeURIComponent(url.password);
+      // WHATWG URL не нормализует hostname у нестандартных схем socks5(h).
+      if (url.protocol.startsWith('socks5')) {
+        const hostname = domainToASCII(url.hostname);
+        if (!hostname) throw new TypeError();
+        url.hostname = hostname;
+      }
       if (url.hostname && url.port !== '0') return url;
     } catch {
       // Ошибка URL может содержать исходную строку вместе с паролем.
@@ -127,7 +134,10 @@ export async function requestTelegram(
 
 function createProxyAgent(proxy: URL, signal: AbortSignal | undefined, timeoutMs: number) {
   if (proxy.protocol.startsWith('socks5')) {
-    return new SocksProxyAgent(proxy, { timeout: timeoutMs || undefined });
+    const agent = new SocksProxyAgent(proxy, { timeout: timeoutMs || undefined });
+    // URL хранит IPv6 в скобках, а socket.connect ожидает сам адрес.
+    agent.proxy.host = proxy.hostname.replace(/^\[|\]$/g, '');
+    return agent;
   }
   // Агент пишет переданный URL в DEBUG; передаём учётные данные только в CONNECT.
   const address = new URL(proxy.href);
