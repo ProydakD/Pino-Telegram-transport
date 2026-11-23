@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "test": "vitest run",
+    "test:proxy": "node --test tests/proxy/routes.cjs",
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test:compat:pino9": "node scripts/run-compat-check.cjs --pino 9",
@@ -14,7 +15,7 @@
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"examples/**/*.ts\"",
     "prepublishOnly": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"examples/**/*.ts\" \"*.{js,ts,json,md}\" \".codex/**/*.md\" \"docs/**/*.md\"",
-    "prerelease": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:compat",
+    "prerelease": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:proxy && npm run test:compat",
     "release": "standard-version",
     "postrelease": "git push --follow-tags"
   },

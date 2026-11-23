@@ -39,6 +39,9 @@ jobs:
       - name: Build package
         run: npm run build
 
+      - name: Test proxy routes against the built package
+        run: npm run test:proxy
+
   compat:
     name: Compat / Node ${{ matrix.node }} / pino@${{ matrix.pino }}
     runs-on: ubuntu-latest
