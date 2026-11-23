@@ -21,6 +21,7 @@ import {
   TelegramTransportOptions,
 } from './types';
 import { TelegramClient, TelegramDeliveryError } from './telegram-client';
+import { ProxyConfigurationError } from './telegram-http';
 
 export type {
   TelegramTransportOptions,
@@ -406,7 +407,8 @@ function isConfigurationInitError(error: unknown): error is Error {
   const code = (error as { code?: string } | undefined)?.code;
   return (
     error instanceof Error &&
-    (code === 'MISSING_BOT_TOKEN' ||
+    (error instanceof ProxyConfigurationError ||
+      code === 'MISSING_BOT_TOKEN' ||
       code === 'NO_CHAT_TARGET' ||
       error.message.includes('botToken') ||
       error.message.includes('целевого чата') ||

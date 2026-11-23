@@ -1,12 +1,11 @@
 import { buildTelegramUrl, createRequestTimeout } from './utils';
+import { requestTelegram } from './telegram-http';
 import {
   NormalizedOptions,
   TelegramInputFile,
   TelegramRequest,
   TelegramSendPayload,
 } from './types';
-
-type FetchBody = Exclude<RequestInit['body'], null | undefined>;
 
 interface SerializedBuffer {
   type: 'Buffer';
@@ -66,12 +65,17 @@ export class TelegramClient {
 
       try {
         const { body, headers } = this.prepareRequestBody(request);
-        const response = await fetch(url, {
-          method: 'POST',
-          headers,
-          body,
-          signal: timeout.signal,
-        });
+        const response = await requestTelegram(
+          url,
+          {
+            method: 'POST',
+            headers,
+            body,
+            signal: timeout.signal,
+          },
+          this.options.proxyUrl,
+          this.options.requestTimeoutMs,
+        );
 
         const data = (await response.json().catch(() => ({}))) as TelegramErrorResponse;
 
@@ -117,7 +121,7 @@ export class TelegramClient {
    * @returns Тело запроса и дополнительные заголовки.
    */
   private prepareRequestBody(request: TelegramRequest): {
-    body: FetchBody;
+    body: string | FormData;
     headers?: Record<string, string>;
   } {
     if (this.containsBinary(request.payload)) {

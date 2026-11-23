@@ -68,6 +68,8 @@ export type TelegramRequest = {
 export interface TelegramTransportOptions {
   /** Токен Telegram-бота. */
   botToken: string;
+  /** Адрес HTTP(S)- или SOCKS5-прокси. Несовместим с пользовательским send. */
+  proxyUrl?: string;
   /** Описание целевых чатов. */
   chatId: RawChatTarget | RawChatTarget[];
   /** Общая тема для всех сообщений (опционально). */
@@ -165,6 +167,7 @@ export interface NormalizedTelegramChatTarget extends Omit<TelegramChatTarget, '
 
 export interface NormalizedOptions {
   botToken: string;
+  proxyUrl?: URL;
   targets: NormalizedTelegramChatTarget[];
   parseMode: 'HTML' | 'Markdown' | 'MarkdownV2';
   disableNotification: boolean;

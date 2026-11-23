@@ -8,6 +8,7 @@
   TelegramTransportOptions,
 } from './types';
 import { createCompactFormatter, createMediaFormatter, createVerboseFormatter } from './presets';
+import { parseProxyUrl, ProxyConfigurationError } from './telegram-http';
 
 const TELEGRAM_BASE_URL = 'https://api.telegram.org';
 const DEFAULT_CONTEXT_KEYS = ['context', 'ctx'];
@@ -80,6 +81,10 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     throw createConfigurationError('Не найдено ни одного целевого чата', 'NO_CHAT_TARGET');
   }
 
+  const proxyUrl = parseProxyUrl(options.proxyUrl);
+  if (proxyUrl && options.send !== undefined) {
+    throw new ProxyConfigurationError('proxyUrl нельзя использовать вместе с send');
+  }
   const parseMode = options.parseMode ?? 'HTML';
   const includeContext = options.includeContext ?? true;
   const contextKeys = Array.isArray(options.contextKeys)
@@ -106,6 +111,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
 
   return {
     botToken,
+    proxyUrl,
     targets,
     parseMode,
     disableNotification: options.disableNotification ?? false,

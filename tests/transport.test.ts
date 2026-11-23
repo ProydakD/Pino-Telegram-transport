@@ -460,6 +460,38 @@ describe('pino-telegram transport', () => {
     expect(payload.text).toContain('userId');
   });
 
+  it.each([
+    ['tg://proxy?secret=fixture-password', undefined],
+    ['https://t.me/proxy?server=localhost&secret=fixture-password', undefined],
+    ['http://user:fixture-password@localhost:70000', undefined],
+    ['socks5://user:%ZZfixture-password@localhost', undefined],
+    ['', undefined],
+    ['http://user:fixture-password@localhost', vi.fn()],
+  ] as const)(
+    'rejects invalid or conflicting proxy configuration (case %#)',
+    async (proxyUrl, send) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const fetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('unexpected network'));
+      try {
+        const options = { botToken: TOKEN, chatId: 111, proxyUrl, send };
+        const stream = telegramTransport(options);
+        stream.end('{"level":30,"msg":"ignored"}\n');
+        await new Promise<void>((resolve) => stream.flush(() => resolve()));
+        expect(warn).toHaveBeenCalledOnce();
+        expect(warn.mock.calls.flat().join(' ')).toContain('transport disabled');
+        expect(warn.mock.calls.flat().join(' ')).not.toMatch(/fixture-password|123:ABC/);
+        expect(() => telegramTransport({ ...options, failOnInitError: true })).toThrow(/proxyUrl/);
+        expect(fetch).not.toHaveBeenCalled();
+        if (send) expect(send).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+        warn.mockRestore();
+      }
+    },
+  );
+
   it('gracefully disables transport when botToken missing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const stream = telegramTransport({ chatId: 111 } as unknown as TelegramTransportOptions);
