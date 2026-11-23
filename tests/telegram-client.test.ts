@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TelegramClient, TelegramDeliveryError } from '../src/telegram-client';
 import { normalizeOptions } from '../src/utils';
@@ -54,6 +55,19 @@ function createTimeoutResponse(init?: Parameters<typeof fetch>[1]): Promise<Resp
 }
 
 describe('TelegramClient', () => {
+  it('times out even while SOCKS5 is waiting for local DNS', async () => {
+    const lookup = vi.spyOn(dns, 'lookup').mockImplementation(() => {});
+    try {
+      const client = createClient({ proxyUrl: 'socks5://127.0.0.1:1080', requestTimeoutMs: 40 });
+      await expect(
+        client.send({ method: 'sendMessage', payload: { chat_id: 111, text: 'dns' } }),
+      ).rejects.toMatchObject({ isTimeout: true });
+      expect(lookup).toHaveBeenCalled();
+    } finally {
+      lookup.mockRestore();
+    }
+  }, 1000);
+
   afterEach(() => {
     vi.useRealTimers();
     globalThis.fetch = originalFetch;

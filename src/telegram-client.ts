@@ -1,5 +1,5 @@
 import { buildTelegramUrl, createRequestTimeout } from './utils';
-import { requestTelegram } from './telegram-http';
+import { redactTelegramDiagnostic, requestTelegram } from './telegram-http';
 import {
   NormalizedOptions,
   TelegramInputFile,
@@ -82,7 +82,14 @@ export class TelegramClient {
         if (!response.ok || !data.ok) {
           const description = data?.description ?? response.statusText ?? 'Unknown error';
           throw new TelegramDeliveryError(
-            'Ошибка Telegram API (' + request.method + '): ' + description,
+            'Ошибка Telegram API (' +
+              request.method +
+              '): ' +
+              redactTelegramDiagnostic(
+                String(description),
+                this.options.botToken,
+                this.options.proxyUrl,
+              ),
             data,
             response.status,
           );
@@ -103,7 +110,10 @@ export class TelegramClient {
 
         const reason = (error as Error)?.message ?? 'неизвестная ошибка';
         throw new TelegramDeliveryError(
-          'Ошибка сети Telegram (' + request.method + '): ' + reason,
+          'Ошибка сети Telegram (' +
+            request.method +
+            '): ' +
+            redactTelegramDiagnostic(reason, this.options.botToken, this.options.proxyUrl),
           undefined,
           undefined,
           error,

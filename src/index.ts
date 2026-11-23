@@ -1,5 +1,6 @@
 import { StringDecoder } from 'node:string_decoder';
 import { Writable } from 'node:stream';
+import { inspect } from 'node:util';
 import { buildMessage } from './formatter';
 import { RateLimiter, TaskQueue } from './rate-limiter';
 import { createTextMessageDedupKey, TextMessageDeduper } from './text-message-deduper';
@@ -21,7 +22,7 @@ import {
   TelegramTransportOptions,
 } from './types';
 import { TelegramClient, TelegramDeliveryError } from './telegram-client';
-import { ProxyConfigurationError } from './telegram-http';
+import { ProxyConfigurationError, redactTelegramDiagnostic } from './telegram-http';
 
 export type {
   TelegramTransportOptions,
@@ -282,7 +283,12 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
 
     if (error instanceof TelegramDeliveryError) {
-      console.error('[pino-telegram] Ошибка доставки:', error.message, error.response);
+      const details = redactTelegramDiagnostic(
+        inspect(error.response),
+        normalized.botToken,
+        normalized.proxyUrl,
+      );
+      console.error('[pino-telegram] Ошибка доставки:', error.message, details);
     } else {
       console.error('[pino-telegram] Необработанная ошибка доставки:', error);
     }

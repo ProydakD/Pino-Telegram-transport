@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import { request } from 'node:https';
 import { Writable } from 'node:stream';
 import { text } from 'node:stream/consumers';
@@ -5,6 +6,19 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export class ProxyConfigurationError extends Error {}
+
+export function redactTelegramDiagnostic(message: string, token: string, proxy?: URL): string {
+  const password = proxy?.password;
+  for (const secret of [
+    token,
+    encodeURIComponent(token),
+    password,
+    password && decodeURIComponent(password),
+  ]) {
+    if (secret) message = message.split(secret).join('[REDACTED]');
+  }
+  return message;
+}
 
 export function parseProxyUrl(value: unknown): URL | undefined {
   if (value === undefined) return undefined;
@@ -47,6 +61,7 @@ export async function requestTelegram(
   const multipart = body instanceof FormData ? new Response(body) : undefined;
   try {
     return await new Promise<TelegramHttpResponse>((resolve, reject) => {
+      signal?.throwIfAborted();
       const req = request(url, {
         agent,
         method: options.method,
@@ -54,8 +69,22 @@ export async function requestTelegram(
           ? { 'content-type': multipart.headers.get('content-type')! }
           : options.headers,
         signal,
+        // Если локальный DNS завершился уже после дедлайна, не начинаем SOCKS handshake.
+        lookup:
+          proxy.protocol === 'socks5:' && signal
+            ? (host, _, done) =>
+                dns.lookup(host, (err, address, family) =>
+                  done(signal.aborted ? signal.reason : err, address, family),
+                )
+            : undefined,
       });
       req.once('error', reject);
+      if (signal) {
+        // До выдачи сокета агентом req.destroy() откладывает событие error.
+        const abort = () => reject(signal.reason);
+        signal.addEventListener('abort', abort, { once: true });
+        req.once('close', () => signal.removeEventListener('abort', abort));
+      }
       req.once('proxyConnect', ({ statusCode }: { statusCode: number }) => {
         if (statusCode !== 200) {
           // Текст отказа CONNECT не является ответом Bot API и может содержать userinfo.
@@ -88,12 +117,11 @@ export async function requestTelegram(
       }
     });
   } catch (error) {
+    agent.destroy();
     // Ошибки агента могут содержать разобранный запрос или ответ прокси, включая секреты.
     const code = (error as NodeJS.ErrnoException)?.code;
     const reason = code && /^[A-Z_0-9]+$/.test(code) ? ` (${code})` : '';
     throw new Error(`Не удалось выполнить запрос через прокси${reason}`);
-  } finally {
-    agent.destroy();
   }
 }
 

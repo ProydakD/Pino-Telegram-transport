@@ -43,7 +43,8 @@ async function startApi(t, statuses = []) {
       sendMessage: { message_id: 17 },
     };
     res.writeHead(status, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: status === 200, result: result[method] ?? true }));
+    const failure = status !== 200 && { description: `Rejected ${url.pathname}: ${password}` };
+    res.end(JSON.stringify({ ok: status === 200, result: result[method] ?? true, ...failure }));
   });
   return { port: await listen(t, server), requests };
 }
@@ -55,6 +56,7 @@ function tunnel(socket, apiPort, ready) {
     upstream.pipe(socket).pipe(upstream);
   });
   upstream.on('error', () => socket.destroy());
+  socket.on('error', () => upstream.destroy());
   socket.on('close', () => upstream.destroy());
 }
 

@@ -103,6 +103,18 @@ test('CLI: flag wins over env; no publication without probe; probe and delete us
   assert.deepEqual(proxy.targets, Array(6).fill(`localhost:${api.port}`));
 });
 
+test('CLI and transport redact credentials echoed by the server', async (t) => {
+  const api = await startApi(t, [403, 403]);
+  const proxy = await startConnect(t, api.port, 'https');
+  const check = await run(api, proxy.url, [cli, 'check']);
+  checkExit(check, 1);
+  assert.match(check.output, /403/);
+  const send = await run(api, proxy.url, [sender, 'default-error']);
+  checkExit(send, 0); // Без onDeliveryError транспорт пишет ошибку в stderr.
+  assert.match(send.output, /Ошибка доставки/);
+  assert.equal(api.requests.length, 2);
+});
+
 test('temporary API failures retry through the same proxy', async (t) => {
   const api = await startApi(t, [429, 503, 200]);
   const proxy = await startConnect(t, api.port, 'http', false);

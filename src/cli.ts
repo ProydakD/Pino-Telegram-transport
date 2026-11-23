@@ -2,7 +2,12 @@
 import { writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 import { buildTelegramUrl, createRequestTimeout } from './utils';
-import { parseProxyUrl, ProxyConfigurationError, requestTelegram } from './telegram-http';
+import {
+  parseProxyUrl,
+  ProxyConfigurationError,
+  redactTelegramDiagnostic,
+  requestTelegram,
+} from './telegram-http';
 
 interface CliContext {
   stdout: (message: string) => void;
@@ -593,7 +598,11 @@ async function callTelegram<T>(
 
     if (!response.ok || !data?.ok || data.result === undefined) {
       const description = data?.description ?? response.statusText ?? 'Неизвестная ошибка';
-      throw new TelegramCliError(description, response.status, data?.error_code);
+      throw new TelegramCliError(
+        redactTelegramDiagnostic(String(description), token, proxy),
+        response.status,
+        data?.error_code,
+      );
     }
 
     return data.result;
@@ -613,7 +622,7 @@ async function callTelegram<T>(
       throw error;
     }
     throw new TelegramCliError(
-      `Сетевая ошибка при вызове ${method}: ${reason}`,
+      `Сетевая ошибка при вызове ${method}: ${redactTelegramDiagnostic(reason, token, proxy)}`,
       undefined,
       undefined,
       error,

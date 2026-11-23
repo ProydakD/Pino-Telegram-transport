@@ -13,16 +13,16 @@ async function main() {
     retryInitialDelay: 1,
     requestTimeoutMs: Number(process.env.FIXTURE_TIMEOUT || 2000),
   };
+  if (mode === 'direct') {
+    options.onDeliveryError = (error) => {
+      console.error(error.message);
+      process.exitCode = 1;
+    };
+  }
   const stream =
     mode === 'worker'
       ? pino.transport({ target: require.resolve('../../dist'), options })
-      : telegramTransport({
-          ...options,
-          onDeliveryError(error) {
-            console.error(error.message);
-            process.exitCode = 1;
-          },
-        });
+      : telegramTransport(options);
   if (mode === 'worker') await once(stream, 'ready');
   const logger = pino({}, stream);
   if (kind === 'photo' || kind === 'document') {
