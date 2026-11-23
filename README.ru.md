@@ -35,7 +35,8 @@
 - Встроенные preset'ы `formatPreset: 'compact' | 'verbose'` позволяют быстро переключаться между коротким и подробным форматом.
 - `dedupWindowMs` подавляет повторяющиеся текстовые события в заданном временном окне.
 - `pino-telegram-cli check --probe-message` проверяет не только доступ к чату, но и реальные права на отправку.
-- `pino-telegram-cli generate-config --include-token` делает генерацию конфигурации безопасной по умолчанию.
+- `proxyUrl` направляет текст, фото и документы через HTTP(S)- или SOCKS5-прокси. В CLI тот же маршрут задаётся через `--proxy-url` или `TELEGRAM_PROXY_URL`.
+- `generate-config` скрывает токен бота, если не указан `--include-token`. Учётные данные прокси не включаются даже с этим флагом.
 - CI и prerelease-проверки теперь покрывают Node.js `18/20/24` и `pino@9/10`.
 
 ### Пример production-конфигурации
@@ -48,6 +49,7 @@ const logger = pino({
     target: 'pino-telegram-logger-transport',
     options: {
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
+      proxyUrl: process.env.TELEGRAM_PROXY_URL,
       chatId: [
         { chatId: process.env.TELEGRAM_ALERTS_CHAT_ID!, minLevel: 'error' },
         { chatId: process.env.TELEGRAM_WARNINGS_CHAT_ID!, minLevel: 'warn' },

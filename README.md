@@ -35,7 +35,8 @@ Recent releases focused on three areas: safer delivery, safer formatting, and lo
 - Built-in `formatPreset: 'compact' | 'verbose'` makes it easier to switch between dense operational logs and more detailed output.
 - `dedupWindowMs` suppresses repeated text events inside a configurable time window.
 - `pino-telegram-cli check --probe-message` verifies real send permissions, not just chat visibility.
-- `pino-telegram-cli generate-config --include-token` keeps generated configs safe by default.
+- Route text, photos, and documents through an HTTP(S) or SOCKS5 proxy with `proxyUrl`. The CLI accepts the same route via `--proxy-url` or `TELEGRAM_PROXY_URL`.
+- `generate-config` hides the bot token unless you pass `--include-token`. Proxy credentials are never included.
 - CI and prerelease checks now cover Node.js `18/20/24` and `pino@9/10`.
 
 ### Example: production-friendly transport config
@@ -48,6 +49,7 @@ const logger = pino({
     target: 'pino-telegram-logger-transport',
     options: {
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
+      proxyUrl: process.env.TELEGRAM_PROXY_URL,
       chatId: [
         { chatId: process.env.TELEGRAM_ALERTS_CHAT_ID!, minLevel: 'error' },
         { chatId: process.env.TELEGRAM_WARNINGS_CHAT_ID!, minLevel: 'warn' },
