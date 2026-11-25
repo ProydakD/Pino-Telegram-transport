@@ -18,8 +18,8 @@ The bundled command line utility helps you validate Telegram credentials before 
 - Without `--probe-message`, `check` stays read-only: it validates the token and chats via the Bot API, but does not publish anything.
 - Set `TELEGRAM_PROXY_URL` or pass `--proxy-url` to route every step, including probe deletion, through the proxy. The flag wins over the environment. Use the environment rather than shell history for credentials.
 - Omit explicit flags if you export `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_THREAD_ID` in the environment.
-- CLI network requests time out after 10 seconds so the check cannot hang forever.
-- Expect a non-zero exit code if Telegram rejects the token, chat, or thread.
+- Each CLI network request has a 10-second deadline, including proxy setup and reading the response. Steps in the same `check` invocation can reuse the tunnel.
+- An invalid [proxy URL](configuration.en.md#client-behaviour) or a failed check returns a non-zero exit code. If SOCKS5 refuses authentication, the diagnostic tells you to check the proxy credentials without printing them.
 
 ### Example
 
@@ -55,4 +55,4 @@ pino-telegram-cli generate-config --token 123:ABC --chat-id -1001234567890 --inc
 ## Exit codes
 
 - 0: all checks passed or the configuration snippet was generated successfully.
-- 1: invalid input, Telegram rejected one of the checks, or writing the file failed.
+- 1: invalid input, a network, proxy or Telegram check failed, or writing the file failed.

@@ -135,7 +135,7 @@ logger.info({ context: { requestId: '42' } }, 'Привет, Telegram!');
 
 - Повторяй доставку при ответах 429 и 5xx.
 - Настраивай задержки опциями `retryAttempts`, `retryInitialDelay`, `retryBackoffFactor`, `retryMaxDelay`.
-- Прерывай медленные запросы к Telegram через `requestTimeoutMs` с дефолтом `10000` мс и повторяй timeout-ошибки.
+- Ограничивай попытку через `requestTimeoutMs` (по умолчанию `10000` мс). Таймаут до HTTP-статуса можно повторить, а обрыв тела после `2xx` не приводит к повтору POST.
 - Учитывай `retry_after`, если Telegram вернул рекомендацию по ожиданию.
 - Отключай повторные попытки значением `retryAttempts: 1`.
 

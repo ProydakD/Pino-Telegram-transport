@@ -30,7 +30,7 @@ English version · [Русская версия](configuration.ru.md)
 | `retryInitialDelay`       | `number`                                                                             | `500`                                                                    | Initial delay (ms) before retrying.                                                      |
 | `retryBackoffFactor`      | `number`                                                                             | `2`                                                                      | Exponential backoff multiplier.                                                          |
 | `retryMaxDelay`           | `number`                                                                             | `10000`                                                                  | Maximum delay (ms) between attempts.                                                     |
-| `requestTimeoutMs`        | `number`                                                                             | `10000`                                                                  | HTTP timeout for Telegram requests in milliseconds. Set `0` to disable the built-in timeout. |
+| `requestTimeoutMs`        | `number`                                                                             | `10000`                                                                  | Deadline per delivery attempt in milliseconds, including proxy setup. Set `0` to disable the client's deadline. |
 | `formatPreset`            | `'default' \| 'compact' \| 'verbose'`                                                | `'default'`                                                              | Selects a built-in formatter preset. `default` is kept for backward compatibility and is equivalent to `verbose`. Prefer presets over callback formatters for `transport.target`. |
 | `formatMessage`           | `FormatMessageFn`                                                                    | `createMediaFormatter()`                                                 | Custom message formatter.                                                                |
 | `onDeliveryError`         | `(error, payload?, method?) => void`                                                 | —                                                                        | Delivery error handler.                                                                  |
@@ -67,15 +67,15 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 ## Client Behaviour
 
 - Without `proxyUrl` the client uses the existing `fetch` route. Set `proxyUrl: process.env.TELEGRAM_PROXY_URL` in the transport options (worker or direct stream) to opt into a proxy. The transport does not read that variable automatically.
-- Use a server URL such as `http://proxy.example:8080`, `https://proxy.example:8443`, or `socks5h://proxy.example:1080`; optional username and password are URL-encoded. With `socks5://` the client resolves the Bot API hostname; with `socks5h://` the proxy does. MTProxy links are not supported.
-- Proxied requests use Node HTTPS and keep TLS verification enabled. Text, photos, documents, and topic messages all use the selected route. An invalid URL or a conflict with `send` is an initialization error. A proxy failure never triggers a direct connection.
-- Slow requests are aborted after `requestTimeoutMs` milliseconds (`10000` by default).
+- Use a server URL such as `http://proxy.example:8080`, `https://proxy.example:8443`, or `socks5h://proxy.example:1080`; optional username and password are URL-encoded. For SOCKS5, each field is limited to 255 UTF-8 bytes after decoding. MTProxy links are not supported.
+- With `socks5://` the client resolves the Bot API hostname and can try other returned addresses if the proxy reports a connection failure for the chosen address. With `socks5h://` the proxy resolves the name. A proxy failure never triggers a direct connection.
+- Proxied requests use Node HTTPS with TLS verification enabled. Text, photos, documents, and topic messages use the same route; a transport reuses its established tunnels when the server supports keep-alive. An invalid URL or a conflict with `send` is an initialization error.
+- Each attempt shares one `requestTimeoutMs` deadline (`10000` ms by default) across DNS, connection establishment, sending, and reading the response. Set `0` to disable the client's deadline, including during the SOCKS handshake.
 - The in-memory delivery queue is capped by `maxQueueSize` (`1000` tasks by default).
 - Queue overflow follows `overflowStrategy`: `dropOldest`, `dropNewest`, or `block`.
 - Deduplication applies only to `sendMessage`; an entry is added to the dedup cache only after all message parts are delivered successfully.
 - Configuration errors disable the transport and print a warning by default; `failOnInitError: true` switches this behaviour to throwing.
-- Responses `429` and `5xx` trigger exponential retry logic.
-- Built-in client timeouts are treated as temporary failures and are retried as well.
+- The client retries `429`, `5xx`, and temporary network errors (including timeouts before HTTP headers). It does not retry a SOCKS authentication refusal. If reading the body fails after `2xx`, the client does not resend the POST: the server may already have processed it.
 - Telegram `retry_after` hints are honoured as the minimum delay before the next attempt.
 - A custom `send` function receives `(payload, method)` and may implement any delivery strategy.
 
