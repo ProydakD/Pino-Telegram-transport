@@ -1,4 +1,4 @@
-﻿# Installation and Updates
+# Installation and Updates
 
 English version · [Русская версия](install.ru.md)
 

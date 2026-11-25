@@ -1,4 +1,4 @@
-﻿export type ChatIdentifier = string | number;
+export type ChatIdentifier = string | number;
 
 export type TelegramMethod = 'sendMessage' | 'sendPhoto' | 'sendDocument';
 export type TelegramQueueOverflowStrategy = 'dropOldest' | 'dropNewest' | 'block';
