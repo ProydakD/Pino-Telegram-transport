@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream';
+import { request as requestHttps } from 'node:https';
 import { json as readJson } from 'node:stream/consumers';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
@@ -73,29 +74,33 @@ interface TelegramHttpOptions {
 
 type TelegramHttpResponse = Pick<Response, 'ok' | 'status' | 'statusText' | 'json'>;
 
+const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+// Встроенный fetch Node 18.13–18.16 удерживает AbortSignal после успешного POST.
+// HTTPS-запрос сохраняет отмену без отключения TLS или повышения engines.node.
+const hasLeakingFetch = nodeMajor === 18 && nodeMinor >= 13 && nodeMinor <= 16;
+
 export async function requestTelegram(
   url: string,
   options: TelegramHttpOptions,
   agent?: TelegramProxyAgent,
 ): Promise<TelegramHttpResponse> {
-  if (!agent) return fetch(url, options);
+  if (!agent && !hasLeakingFetch) return fetch(url, options);
 
   const { signal, body, afterProxyAddress } = options;
   // На Node 18 с --no-experimental-fetch глобальных FormData и Response нет.
   const multipart = body === undefined || typeof body === 'string' ? undefined : new Response(body);
   try {
     return await new Promise<TelegramHttpResponse>((resolve, reject) => {
-      const req = agent.createRequest(
-        url,
-        {
-          method: options.method,
-          headers: multipart
-            ? { 'content-type': multipart.headers.get('content-type')! }
-            : options.headers,
-          signal,
-        },
-        afterProxyAddress,
-      );
+      const requestOptions = {
+        method: options.method,
+        headers: multipart
+          ? { 'content-type': multipart.headers.get('content-type')! }
+          : options.headers,
+        signal,
+      };
+      const req = agent
+        ? agent.createRequest(url, requestOptions, afterProxyAddress)
+        : requestHttps(url, requestOptions);
       req.once('error', reject);
       req.once('response', (response) => {
         const status = response.statusCode ?? 502;
@@ -116,6 +121,7 @@ export async function requestTelegram(
       }
     });
   } catch (error) {
+    if (!agent) throw error;
     if (
       error instanceof ProxyConnectError ||
       error instanceof SocksAuthenticationError ||
