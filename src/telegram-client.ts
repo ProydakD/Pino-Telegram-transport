@@ -70,15 +70,16 @@ export class TelegramDeliveryError extends Error {
  */
 export class TelegramClient {
   private readonly proxyAgent?: TelegramProxyAgent;
-  readonly #lifetime = new AbortController();
-  readonly signal = this.#lifetime.signal;
+  // TS-private не требует ES2015 target от потребителя публичных деклараций.
+  private readonly lifetime = new AbortController();
+  readonly signal = this.lifetime.signal;
 
   constructor(private readonly options: NormalizedOptions) {
     if (options.proxyUrl) this.proxyAgent = new TelegramProxyAgent(options.proxyUrl);
   }
 
   close(): void {
-    this.#lifetime.abort(new Error('Транспорт Telegram закрыт'));
+    this.lifetime.abort(new Error('Транспорт Telegram закрыт'));
     this.proxyAgent?.destroy();
   }
 
