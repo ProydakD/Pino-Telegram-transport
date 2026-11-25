@@ -13,6 +13,8 @@ import {
 // Ошибки проверки имени или цепочки сертификата, а не обрывы TLS-соединения.
 const TLS_VERIFICATION_CODES = new Set([
   'CERT_HAS_EXPIRED',
+  'CERT_KEY_TOO_WEAK',
+  'CERT_SIGNATURE_ALGORITHM_TOO_WEAK',
   'CERT_NOT_YET_VALID',
   'CERT_REJECTED',
   'CERT_REVOKED',

@@ -130,7 +130,16 @@ export async function requestTelegram(
       throw error;
     // Ошибки агента могут содержать разобранный запрос или ответ прокси, включая секреты.
     // Сохраняем для политики повторов только безопасный код Node, без исходной ошибки.
-    const code = error instanceof Error && 'code' in error ? error.code : undefined;
+    let code = error instanceof Error && 'code' in error ? error.code : undefined;
+    // OpenSSL иногда объединяет отказы криптополитики в UNSPECIFIED. Сохраняем
+    // только известную безопасную категорию, а не произвольный текст/сертификат.
+    if (code === 'UNSPECIFIED' && error instanceof Error) {
+      if (['EE certificate key too weak', 'CA certificate key too weak'].includes(error.message)) {
+        code = 'CERT_KEY_TOO_WEAK';
+      } else if (error.message === 'CA signature digest algorithm too weak') {
+        code = 'CERT_SIGNATURE_ALGORITHM_TOO_WEAK';
+      }
+    }
     throw new ProxyRequestError(
       typeof code === 'string' && /^[A-Z_0-9]+$/.test(code) ? code : undefined,
     );
