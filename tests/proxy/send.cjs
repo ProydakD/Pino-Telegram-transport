@@ -15,7 +15,7 @@ async function main() {
   };
   if (mode === 'direct') {
     options.onDeliveryError = (error) => {
-      console.error(error.message);
+      console.error(error.message, { status: error.status, isTimeout: error.isTimeout });
       process.exitCode = 1;
     };
   }

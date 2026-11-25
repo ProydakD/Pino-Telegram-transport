@@ -1,7 +1,9 @@
 import dns from 'node:dns';
 import { request } from 'node:https';
-import { Writable } from 'node:stream';
-import { text } from 'node:stream/consumers';
+import { Readable } from 'node:stream';
+import { json as readJson } from 'node:stream/consumers';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream } from 'node:stream/web';
 import { domainToASCII } from 'node:url';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
@@ -105,20 +107,18 @@ export async function requestTelegram(
       });
       req.once('response', (response) => {
         const status = response.statusCode ?? 502;
-        text(response).then(
-          (content) =>
-            resolve({
-              ok: status >= 200 && status < 300,
-              status,
-              statusText: response.statusMessage ?? '',
-              json: async () => JSON.parse(content),
-            }),
-          reject,
-        );
+        // Как и fetch, возвращаем статус до чтения тела: обрыв JSON не отменяет HTTP 200.
+        resolve({
+          ok: status >= 200 && status < 300,
+          status,
+          statusText: response.statusMessage ?? '',
+          json: () => readJson(response),
+        });
       });
       if (multipart?.body) {
-        // Response формирует boundary и поток из того же FormData, что получает fetch.
-        multipart.body.pipeTo(Writable.toWeb(req), { signal }).catch(reject);
+        // Response сериализует FormData в нативный Web Stream Node. На ранних Node 18
+        // Writable.toWeb не принимает ClientRequest, поэтому адаптируем источник.
+        pipeline(Readable.fromWeb(multipart.body as ReadableStream), req, { signal }).catch(reject);
       } else {
         req.end(body);
       }

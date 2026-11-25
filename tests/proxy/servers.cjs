@@ -30,13 +30,15 @@ async function listen(t, server) {
   return server.address().port;
 }
 
-async function startApi(t, statuses = []) {
+async function startApi(t, replies = []) {
   const requests = [];
   const server = https.createServer(tls, async (req, res) => {
     const url = new URL(req.url, 'https://localhost');
     const method = url.pathname.split('/').pop();
     requests.push({ method, url, headers: req.headers, body: await buffer(req) });
-    const status = statuses.shift() ?? 200;
+    const reply = replies.shift() ?? 200;
+    if (typeof reply === 'function') return reply(res);
+    const status = reply;
     const result = {
       getChat: { id: 42, type: 'group' },
       getMe: { id: 1, first_name: 'Fixture' },

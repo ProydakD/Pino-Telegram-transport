@@ -123,6 +123,26 @@ test('temporary API failures retry through the same proxy', async (t) => {
   assert.equal(proxy.targets.length, 3);
 });
 
+for (const [kind, method] of [
+  ['text', 'sendMessage'],
+  ['document', 'sendDocument'],
+]) {
+  test(`${method}: a truncated HTTP 200 response does not repeat the POST`, async (t) => {
+    const api = await startApi(t, [
+      (res) => {
+        res.writeHead(200, { 'content-type': 'application/json', 'content-length': 100 });
+        res.write('{"ok":');
+        res.socket.end();
+      },
+    ]);
+    const proxy = await startConnect(t, api.port, 'http', false);
+    const result = await run(api, proxy.url, [sender, 'direct', kind], { FIXTURE_ATTEMPTS: '2' });
+    checkExit(result, 1);
+    assert.match(result.output, /status: 200/);
+    assert.deepEqual(api.requests.map((request) => request.method), [method]);
+  });
+}
+
 test('SOCKS5 accepts a bracketed IPv6 proxy address', async (t) => {
   const api = await startApi(t);
   const proxy = await startSocks(t, api.port, 'socks5h', false);

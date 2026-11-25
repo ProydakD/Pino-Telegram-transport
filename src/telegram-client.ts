@@ -77,9 +77,16 @@ export class TelegramClient {
           this.options.requestTimeoutMs,
         );
 
-        const data = (await response.json().catch(() => ({}))) as TelegramErrorResponse;
+        const data = (await response.json().catch(() => {
+          // Ошибка JSON может содержать фрагмент тела. Для решения о повторе достаточно статуса.
+          throw new TelegramDeliveryError(
+            `Не удалось прочитать ответ Telegram (${request.method})`,
+            undefined,
+            response.status,
+          );
+        })) as TelegramErrorResponse;
 
-        if (!response.ok || !data.ok) {
+        if (!response.ok || !data?.ok) {
           const description = data?.description ?? response.statusText ?? 'Unknown error';
           throw new TelegramDeliveryError(
             'Ошибка Telegram API (' +
@@ -99,7 +106,7 @@ export class TelegramClient {
           throw new TelegramDeliveryError(
             `Таймаут запроса к Telegram (${request.method}) после ${this.options.requestTimeoutMs} мс`,
             undefined,
-            undefined,
+            error instanceof TelegramDeliveryError ? error.status : undefined,
             error,
             true,
           );
@@ -406,9 +413,7 @@ export class TelegramClient {
    */
   private isRetryable(error: unknown): boolean {
     if (error instanceof TelegramDeliveryError) {
-      if (error.isTimeout) {
-        return true;
-      }
+      // После заголовков решение зависит от статуса, даже если чтение тела истекло по таймауту.
       const code = this.resolveStatusCode(error);
       if (code === 429) {
         return true;
