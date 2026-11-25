@@ -129,7 +129,7 @@ export async function runCli(
 
   switch (command) {
     case 'check': {
-      const agent = proxy && new TelegramProxyAgent(proxy);
+      const agent = proxy && new TelegramProxyAgent(proxy, CLI_REQUEST_TIMEOUT_MS);
       try {
         return await handleCheck(options, context, agent);
       } finally {

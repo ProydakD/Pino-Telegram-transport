@@ -61,13 +61,7 @@ export async function openHttpTunnel(
         const status = response.statusCode ?? 502;
         if (status < 200 || status >= 300) {
           // Тело, reason phrase и произвольные заголовки прокси не доходят до доставки.
-          reject(
-            new ProxyConnectError(
-              status,
-              parseRetryAfter(response.rawHeaders),
-              address,
-            ),
-          );
+          reject(new ProxyConnectError(status, parseRetryAfter(response.rawHeaders), address));
           return;
         }
         if (head.length) socket.unshift(head);

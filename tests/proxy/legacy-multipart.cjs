@@ -10,12 +10,14 @@ async function main() {
   try {
     const api = await startApi(fixture);
     const proxy = await startConnect(fixture, api.port, 'http', false);
-    utils.buildTelegramUrl = (_, method) => `https://localhost:${api.port}/bot0:fixture/${method}`;
+    // Сервер слушает IPv4; прямой путь не перенаправляется тестовым прокси.
+    const host = process.argv.includes('--direct') ? '127.0.0.1' : 'localhost';
+    utils.buildTelegramUrl = (_, method) => `https://${host}:${api.port}/bot0:fixture/${method}`;
     const client = new TelegramClient(
       utils.normalizeOptions({
         botToken: '0:fixture',
         chatId: 42,
-        proxyUrl: proxy.url,
+        proxyUrl: process.argv.includes('--direct') ? undefined : proxy.url,
         retryAttempts: 1,
       }),
     );

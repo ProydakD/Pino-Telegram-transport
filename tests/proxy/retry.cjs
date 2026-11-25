@@ -30,13 +30,16 @@ function methods(api) {
 test('SOCKS5: a stalled destination CONNECT leaves budget for the next IP', async (t) => {
   const api = await startApi(t);
   const proxy = await startSocks(t, api.port, 'socks5', {
-    connectReply: ({ type }) => type === 4 ? 'stall' : 0,
+    connectReply: ({ type }) => (type === 4 ? 'stall' : 0),
   });
   const result = await run(api, proxy.url, [sender, 'direct'], {
     env: { FIXTURE_DUAL_STACK: '1', FIXTURE_TIMEOUT: '1000', FIXTURE_ATTEMPTS: '1' },
   });
   assert.equal(result.code, 0, result.output);
-  assert.deepEqual(proxy.targets.map(({ type }) => type), [4, 1]);
+  assert.deepEqual(
+    proxy.targets.map(({ type }) => type),
+    [4, 1],
+  );
   assert.deepEqual(methods(api), ['POST sendMessage']);
 });
 
@@ -132,7 +135,10 @@ test('Telegram: retry_after above retryMaxDelay still controls the next POST', a
   assert.deepEqual(methods(api), ['POST sendMessage', 'POST sendMessage']);
 });
 
-for (const [cap, expectedConnects] of [[500, 1], [1000, 2]]) {
+for (const [cap, expectedConnects] of [
+  [500, 1],
+  [1000, 2],
+]) {
   test(`CONNECT: configured cap ${cap} stays below the initial backoff`, async (t) => {
     const api = await startApi(t);
     let connects = 0;

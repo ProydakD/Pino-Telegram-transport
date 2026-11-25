@@ -11,23 +11,39 @@ async function main() {
   assert.equal(typeof global.gc, 'function', 'Run with --expose-gc');
   const read = (name) => readFileSync(join(__dirname, name));
   // Не сохраняем запросы: измеряется клиент, а не история тестового сервера.
-  const server = https.createServer({
-    key: read('localhost-key.pem'), cert: read('localhost-cert.pem'),
-  }, (req, res) => { req.resume(); res.end('{"ok":true}'); });
+  const server = https.createServer(
+    {
+      key: read('localhost-key.pem'),
+      cert: read('localhost-cert.pem'),
+    },
+    (req, res) => {
+      req.resume();
+      res.end('{"ok":true}');
+    },
+  );
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   utils.buildTelegramUrl = () => `https://127.0.0.1:${server.address().port}/sendMessage`;
-  const client = new TelegramClient(utils.normalizeOptions({
-    botToken: '0:fixture', chatId: 42, requestTimeoutMs: 0,
-  }));
+  const client = new TelegramClient(
+    utils.normalizeOptions({
+      botToken: '0:fixture',
+      chatId: 42,
+      requestTimeoutMs: 0,
+    }),
+  );
   const samples = [];
   try {
     for (let index = 1; index <= 4000; index++) {
       await client.send({ method: 'sendMessage', payload: { chat_id: 42, text: 'fixture' } });
       if (index % 500 === 0) {
-        await tick(); global.gc(); await tick(); global.gc();
+        await tick();
+        global.gc();
+        await tick();
+        global.gc();
         samples.push(process.memoryUsage().heapUsed);
-        console.log(`${process.version}: POST ${index}, heapKiB=${Math.round(samples.at(-1) / 1024)}`);
+        console.log(
+          `${process.version}: POST ${index}, heapKiB=${Math.round(samples.at(-1) / 1024)}`,
+        );
       }
     }
     // Запас для вариаций GC; исходный дефект удерживал свыше 60 MiB после прогрева.
@@ -39,4 +55,7 @@ async function main() {
   }
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -1,6 +1,7 @@
 import dns from 'node:dns';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TelegramClient, TelegramDeliveryError } from '../src/telegram-client';
+import { TelegramProxyAgent } from '../src/telegram-proxy-agent';
 import { normalizeOptions } from '../src/utils';
 import type {
   TelegramDocumentPayload,
@@ -55,6 +56,35 @@ function createTimeoutResponse(init?: Parameters<typeof fetch>[1]): Promise<Resp
 }
 
 describe('TelegramClient', () => {
+  it.each([
+    ['UNSPECIFIED', 'EE certificate key too weak', 1, 'CERT_KEY_TOO_WEAK'],
+    ['UNSPECIFIED', 'another TLS failure', 3, 'UNSPECIFIED'],
+    ['ECONNRESET', 'connection reset', 3, 'ECONNRESET'],
+  ])(
+    'classifies proxy error %s: %s without leaking its text',
+    async (code, message, attempts, expectedCode) => {
+      const request = vi
+        .spyOn(TelegramProxyAgent.prototype, 'createRequest')
+        .mockImplementation(() => {
+          throw Object.assign(new Error(message), { code });
+        });
+      const client = createClient({
+        proxyUrl: 'https://127.0.0.1:1080',
+        retryAttempts: 3,
+        retryInitialDelay: 0,
+      });
+      try {
+        await expect(
+          client.send({ method: 'sendMessage', payload: { chat_id: 111, text: 'tls' } }),
+        ).rejects.toMatchObject({ cause: { code: expectedCode } });
+        expect(request).toHaveBeenCalledTimes(attempts);
+      } finally {
+        client.close();
+        request.mockRestore();
+      }
+    },
+  );
+
   it('times out even while SOCKS5 is waiting for local DNS', async () => {
     const lookup = vi.spyOn(dns, 'lookup').mockImplementation(() => {});
     try {

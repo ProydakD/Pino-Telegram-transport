@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "test": "vitest run",
-    "test:proxy": "node --test tests/proxy/routes.cjs tests/proxy/retry.cjs tests/proxy/tcp-selection.cjs",
+    "test:proxy": "node --test tests/proxy/routes.cjs tests/proxy/retry.cjs tests/proxy/tcp-selection.cjs tests/proxy/weak-tls.cjs",
+    "test:types": "node tests/package-types.cjs",
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test:compat:pino9": "node scripts/run-compat-check.cjs --pino 9",

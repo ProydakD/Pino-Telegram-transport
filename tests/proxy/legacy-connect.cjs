@@ -17,11 +17,15 @@ async function main() {
       const proxy = await startConnect(fixture, api.port, 'http', false, {
         onConnect(socket, accept) {
           if (++connects > 1) return accept();
-          socket.end(`HTTP/1.1 ${status} Fixture\r\n${headers.map((value) => `Retry-After: ${value}\r\n`).join('')}Content-Length: 0\r\n\r\n`);
+          socket.end(
+            `HTTP/1.1 ${status} Fixture\r\n${headers.map((value) => `Retry-After: ${value}\r\n`).join('')}Content-Length: 0\r\n\r\n`,
+          );
         },
       });
       // Прямой транспорт не зависит от Pino 10, которому нужна более новая Node.
-      const result = await run(api, proxy.url, ['-e', `
+      const result = await run(api, proxy.url, [
+        '-e',
+        `
         const utils = require('./dist/utils');
         utils.waitForDelay = async (ms) => console.log('fixture wait: ' + ms);
         const stream = require('./dist').default({
@@ -30,7 +34,8 @@ async function main() {
           onDeliveryError: (error) => { console.error(error.message); process.exitCode = 1; }
         });
         stream.end(JSON.stringify({level: 30, msg: 'fixture'}) + '\\n');
-      `]);
+      `,
+      ]);
       assert.equal(result.code, status === 407 ? 1 : 0, result.output);
       assert.doesNotMatch(result.output, /TypeError/);
       if (status === 407) assert.match(result.output, /HTTP 407/);
@@ -38,7 +43,9 @@ async function main() {
       assert.equal(api.requests.length - before, attempts - 1);
       const waits = [...result.output.matchAll(/fixture wait: (\d+)/g)].map(([, ms]) => Number(ms));
       assert.deepEqual(waits, wait === undefined ? [] : [wait]);
-      console.log(`${process.version}: CONNECT ${status}, headers=${headers.length}, attempts=${connects}, waits=${waits}`);
+      console.log(
+        `${process.version}: CONNECT ${status}, headers=${headers.length}, attempts=${connects}, waits=${waits}`,
+      );
     }
   } finally {
     for (const cleanup of cleanups) await cleanup();
