@@ -140,6 +140,7 @@ async function startSocks(
       const target = { type, host, port };
       targets.push(target);
       const reply = connectReply?.(target) ?? 0;
+      if (reply === 'stall') return socket.resume();
       if (reply) return socket.end(Buffer.from([5, reply, 0, 1, 0, 0, 0, 0, 0, 0]));
       tunnel(socket, apiPort, Buffer.from([5, 0, 0, 1, 127, 0, 0, 1, 0, 0]));
     }

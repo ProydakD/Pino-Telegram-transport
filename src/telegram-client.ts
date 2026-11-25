@@ -75,7 +75,8 @@ export class TelegramClient {
   readonly signal = this.lifetime.signal;
 
   constructor(private readonly options: NormalizedOptions) {
-    if (options.proxyUrl) this.proxyAgent = new TelegramProxyAgent(options.proxyUrl);
+    if (options.proxyUrl)
+      this.proxyAgent = new TelegramProxyAgent(options.proxyUrl, options.requestTimeoutMs);
   }
 
   close(): void {

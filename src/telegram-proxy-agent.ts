@@ -17,7 +17,10 @@ export class TelegramProxyAgent extends Agent {
   readonly #pending = new Set<AbortController>();
   #closed = false;
 
-  constructor(proxy: URL) {
+  constructor(
+    proxy: URL,
+    private readonly requestTimeoutMs = 0,
+  ) {
     super({ keepAlive: true, maxFreeSockets: 1 });
     // Агент обслуживает только HTTPS. Не даём agent-base определять протокол по стеку ошибок.
     this.protocol = 'https:';
@@ -86,7 +89,7 @@ export class TelegramProxyAgent extends Agent {
     const { host, port, servername } = options;
     const target = { host, port };
     const socket = this.#proxy.protocol.startsWith('socks5')
-      ? await connectSocks5(this.#proxy, target, signal)
+      ? await connectSocks5(this.#proxy, target, signal, this.requestTimeoutMs)
       : await openHttpTunnel(this.#proxy, target, signal, afterAddress);
     try {
       signal.throwIfAborted();

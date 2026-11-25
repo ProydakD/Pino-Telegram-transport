@@ -15,10 +15,13 @@ export class SocksConnectError extends Error {
   }
 }
 
+class SocksAddressTimeoutError extends Error {}
+
 export async function connectSocks5(
   proxy: URL,
   target: { host: string; port: number },
   signal: AbortSignal,
+  timeoutMs = 0,
 ): Promise<Socket> {
   const addresses =
     proxy.protocol === 'socks5:' && !isIP(target.host)
@@ -27,13 +30,17 @@ export async function connectSocks5(
 
   for (const [index, host] of addresses.entries()) {
     try {
-      return await openSocksTunnel(proxy, { host, port: target.port }, signal);
+      // Делим бюджет только между локально разрешёнными адресами назначения.
+      // Последнему адресу оставляем остаток общего дедлайна; ноль не вводит новый таймаут.
+      const addressTimeout = index < addresses.length - 1 ? timeoutMs / addresses.length : 0;
+      return await openSocksTunnel(proxy, { host, port: target.port }, signal, addressTimeout);
     } catch (error) {
       // Другой адрес может помочь только при отказе CONNECT, а не при отказе
       // авторизации, запрете правилами прокси или обрыве самого соединения с прокси.
       if (
-        !(error instanceof SocksConnectError) ||
-        ![1, 3, 4, 5, 6, 8].includes(error.reply) ||
+        signal.aborted ||
+        (!(error instanceof SocksAddressTimeoutError) &&
+          (!(error instanceof SocksConnectError) || ![1, 3, 4, 5, 6, 8].includes(error.reply))) ||
         index === addresses.length - 1
       ) {
         throw error;
@@ -47,10 +54,13 @@ async function openSocksTunnel(
   proxy: URL,
   target: { host: string; port: number },
   signal: AbortSignal,
+  addressTimeout: number,
 ): Promise<Socket> {
   const { socket } = await connectToProxy(proxy, signal);
   const abort = () => socket.destroy();
   signal.addEventListener('abort', abort, { once: true });
+  let timer: NodeJS.Timeout | undefined;
+  let addressTimedOut = false;
   try {
     signal.throwIfAborted();
     // Только CONNECT и методы без авторизации / логин-пароль (RFC 1928 и 1929).
@@ -81,6 +91,16 @@ async function openSocksTunnel(
     port.writeUInt16BE(target.port);
     socket.write(Buffer.concat([Buffer.from([5, 1, 0]), encodeSocksAddress(target.host), port]));
 
+    // Таймер начинается после авторизации и касается только ответа CONNECT.
+    // Ни отказ авторизации, ни медленный POST не являются поводом сменить IP.
+    if (addressTimeout > 0) {
+      timer = setTimeout(() => {
+        addressTimedOut = true;
+        socket.destroy();
+      }, addressTimeout);
+      timer.unref();
+    }
+
     const [replyVersion, reply, reserved, type] = await readSocksBytes(socket, 4);
     if (replyVersion !== 5 || reserved !== 0) throw new Error('Некорректный ответ CONNECT SOCKS5');
     if (reply !== 0) throw new SocksConnectError(reply);
@@ -104,8 +124,10 @@ async function openSocksTunnel(
     return socket;
   } catch (error) {
     socket.destroy();
+    if (addressTimedOut && !signal.aborted) throw new SocksAddressTimeoutError();
     throw error;
   } finally {
+    clearTimeout(timer);
     signal.removeEventListener('abort', abort);
   }
 }

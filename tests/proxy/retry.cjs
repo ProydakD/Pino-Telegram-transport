@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { join } = require('node:path');
 const test = require('node:test');
 const { run } = require('./run.cjs');
-const { startApi, startConnect } = require('./servers.cjs');
+const { startApi, startConnect, startSocks } = require('./servers.cjs');
 
 const sender = join(__dirname, 'send.cjs');
 const cli = require.resolve('../../dist/cli');
@@ -26,6 +26,19 @@ function plannedWaits(result) {
 function methods(api) {
   return api.requests.map(({ verb, method }) => `${verb} ${method}`);
 }
+
+test('SOCKS5: a stalled destination CONNECT leaves budget for the next IP', async (t) => {
+  const api = await startApi(t);
+  const proxy = await startSocks(t, api.port, 'socks5', {
+    connectReply: ({ type }) => type === 4 ? 'stall' : 0,
+  });
+  const result = await run(api, proxy.url, [sender, 'direct'], {
+    env: { FIXTURE_DUAL_STACK: '1', FIXTURE_TIMEOUT: '1000', FIXTURE_ATTEMPTS: '1' },
+  });
+  assert.equal(result.code, 0, result.output);
+  assert.deepEqual(proxy.targets.map(({ type }) => type), [4, 1]);
+  assert.deepEqual(methods(api), ['POST sendMessage']);
+});
 
 async function startProxyPair(t, api, protocol, onConnect) {
   const first = await startConnect(t, api.port, protocol, false, { host: '::1', onConnect });
