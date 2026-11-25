@@ -64,7 +64,7 @@ export async function openHttpTunnel(
           reject(
             new ProxyConnectError(
               status,
-              parseRetryAfter(response.headersDistinct['retry-after']),
+              parseRetryAfter(response.rawHeaders),
               address,
             ),
           );
@@ -84,8 +84,13 @@ export async function openHttpTunnel(
   }
 }
 
-function parseRetryAfter(values: string[] | undefined): number | undefined {
-  if (values?.length !== 1) return undefined;
+function parseRetryAfter(rawHeaders: string[]): number | undefined {
+  // headersDistinct отсутствует на Node 18.0–18.2; rawHeaders сохраняет дубликаты.
+  const values: string[] = [];
+  for (let index = 0; index < rawHeaders.length; index += 2) {
+    if (rawHeaders[index].toLowerCase() === 'retry-after') values.push(rawHeaders[index + 1]);
+  }
+  if (values.length !== 1) return undefined;
   const value = values[0]; // HTTP-парсер уже убрал допустимые пробелы по краям значения.
   if (/^\d+$/.test(value)) return Number(value) * 1000;
 
