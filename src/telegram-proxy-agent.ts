@@ -4,6 +4,7 @@ import { isIP } from 'node:net';
 import { connect as connectTls } from 'node:tls';
 import { Agent, type AgentConnectOpts } from 'agent-base';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { connectToProxy } from './proxy-dns';
 import { connectSocks5 } from './socks5';
 
 export class TelegramProxyAgent extends Agent {
@@ -14,6 +15,9 @@ export class TelegramProxyAgent extends Agent {
 
   constructor(proxy: URL) {
     super({ keepAlive: true, maxFreeSockets: 1 });
+    // Агент обслуживает только HTTPS. Не даём agent-base определять протокол по стеку ошибок.
+    this.protocol = 'https:';
+    this.defaultPort = 443;
     this.#proxy = proxy;
   }
 
@@ -25,7 +29,17 @@ export class TelegramProxyAgent extends Agent {
     if (this.#closed) throw new Error('Прокси-агент закрыт');
     const { signal } = options;
     signal?.throwIfAborted();
-    const req = request(url, { ...options, agent: this });
+    const { protocol, hostname, port, pathname, search } = new URL(url);
+    // Node 18.12 переносит href и pathname из URL в отладочный вывод агента.
+    // Токен нужен только в пути запроса, а не в параметрах подключения.
+    const req = request({
+      ...options,
+      agent: this,
+      protocol,
+      hostname: hostname.replace(/^\[|\]$/g, ''),
+      port,
+      path: pathname + search,
+    });
     // Node привязывает signal к ClientRequest, но не передаёт его агенту.
     // agent-base вызывает connect асинхронно, после регистрации сигнала.
     if (signal) this.#requestSignals.set(req, signal);
@@ -89,13 +103,16 @@ export class TelegramProxyAgent extends Agent {
     address.username = '';
     address.password = '';
     const credentials = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
-    return new HttpsProxyAgent(address, {
-      keepAlive: true,
-      signal,
-      headers: () =>
-        proxy.username || proxy.password
-          ? { 'Proxy-Authorization': `Basic ${Buffer.from(credentials).toString('base64')}` }
-          : {},
-    }).connect(req, options);
+    return connectToProxy(address.hostname.replace(/^\[|\]$/g, ''), signal, (lookup) =>
+      new HttpsProxyAgent(address, {
+        ...lookup,
+        keepAlive: true,
+        signal,
+        headers: () =>
+          proxy.username || proxy.password
+            ? { 'Proxy-Authorization': `Basic ${Buffer.from(credentials).toString('base64')}` }
+            : {},
+      }).connect(req, options),
+    );
   }
 }

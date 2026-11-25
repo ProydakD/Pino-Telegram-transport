@@ -1,5 +1,4 @@
 const assert = require('node:assert/strict');
-const { execFile } = require('node:child_process');
 const dns = require('node:dns');
 const { once } = require('node:events');
 const net = require('node:net');
@@ -9,39 +8,12 @@ const { setTimeout: delay } = require('node:timers/promises');
 const telegramTransport = require('../../dist').default;
 const { TelegramClient } = require('../../dist/telegram-client');
 const { normalizeOptions } = require('../../dist/utils');
-const { cert, listen, startApi, startConnect, startSocks } = require('./servers.cjs');
+const { run, token } = require('./run.cjs');
+const { listen, startApi, startConnect, startSocks } = require('./servers.cjs');
 
-const token = '123:fixture-token';
 const socksCredentials = { user: 'user', password: 'fixture:secret' };
 const sender = join(__dirname, 'send.cjs');
 const cli = require.resolve('../../dist/cli');
-
-function run(api, proxyUrl, args, { env = {}, timeout = 8000 } = {}) {
-  return new Promise((resolve, reject) => {
-    execFile(
-      process.execPath,
-      ['-r', join(__dirname, 'loopback.cjs'), ...args],
-      {
-        timeout,
-        env: {
-          ...process.env,
-          NODE_EXTRA_CA_CERTS: cert,
-          NODE_TLS_REJECT_UNAUTHORIZED: '1',
-          FIXTURE_PORT: String(api.port),
-          TELEGRAM_PROXY_URL: proxyUrl,
-          TELEGRAM_BOT_TOKEN: token,
-          TELEGRAM_CHAT_ID: '42',
-          TELEGRAM_THREAD_ID: '7',
-          ...env,
-        },
-      },
-      (error, stdout, stderr) => {
-        if (error && typeof error.code !== 'number') return reject(error);
-        resolve({ code: error?.code ?? 0, output: stdout + stderr });
-      },
-    );
-  });
-}
 
 function checkExit(result, expected) {
   assert.equal(result.code, expected, result.output);
@@ -137,6 +109,21 @@ test('CLI and transport redact credentials echoed by the server', async (t) => {
   checkExit(send, 0); // Без onDeliveryError транспорт пишет ошибку в stderr.
   assert.match(send.output, /Ошибка доставки/);
   assert.equal(api.requests.length, 2);
+});
+
+test('CONNECT uses port 443 independently of the stack trace limit', async (t) => {
+  const api = await startApi(t);
+  const proxy = await startConnect(t, api.port, 'http', false);
+  const observed = [];
+  for (const depth of [10, 4, 0]) {
+    const before = proxy.targets.length;
+    const result = await run(api, proxy.url, [cli, 'check'], {
+      env: { FIXTURE_PORT: '', NODE_OPTIONS: `--stack-trace-limit=${depth}` },
+    });
+    observed.push({ exit: result.code, target: proxy.targets[before] ?? null });
+  }
+  assert.deepEqual(observed, Array(3).fill({ exit: 0, target: 'localhost:443' }));
+  assert.equal(api.requests.length, 6);
 });
 
 test('temporary API failures retry through the same proxy', async (t) => {

@@ -64,7 +64,9 @@ function tunnel(socket, apiPort, ready) {
 
 async function startConnect(t, apiPort, protocol, auth = true) {
   const targets = [];
+  const serverNames = [];
   const server = protocol === 'https' ? https.createServer(tls) : http.createServer();
+  server.on('secureConnection', (socket) => serverNames.push(socket.servername));
   server.on('connect', (req, socket) => {
     targets.push(req.url);
     if (auth && req.headers['proxy-authorization'] !== basicAuth) {
@@ -76,6 +78,7 @@ async function startConnect(t, apiPort, protocol, auth = true) {
   const port = await listen(t, server);
   return {
     targets,
+    serverNames,
     url: `${protocol}://${auth ? 'user:' + encodeURIComponent(password) + '@' : ''}127.0.0.1:${port}`,
   };
 }

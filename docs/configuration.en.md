@@ -70,7 +70,8 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 - Use a server URL such as `http://proxy.example:8080`, `https://proxy.example:8443`, or `socks5h://proxy.example:1080`; optional username and password are URL-encoded. For SOCKS5, each field is limited to 255 UTF-8 bytes after decoding. MTProxy links are not supported.
 - With `socks5://` the client resolves the Bot API hostname and can try other returned addresses if the proxy reports a connection failure for the chosen address. With `socks5h://` the proxy resolves the name. A proxy failure never triggers a direct connection.
 - Proxied requests use Node HTTPS with TLS verification enabled. Text, photos, documents, and topic messages use the same route; a transport reuses its established tunnels when the server supports keep-alive. An invalid URL or a conflict with `send` is an initialization error.
-- Each attempt shares one `requestTimeoutMs` deadline (`10000` ms by default) across DNS, connection establishment, sending, and reading the response. Set `0` to disable the client's deadline, including during the SOCKS handshake.
+- If a proxy hostname resolves to multiple addresses, a TCP connection failure can move on to the next address. HTTPS proxies are still verified against their original hostname.
+- Each attempt shares one `requestTimeoutMs` deadline (`10000` ms by default) across DNS, connection establishment (including proxy address fallback), sending, and reading the response. Set `0` to disable the client's deadline, including during the SOCKS handshake.
 - The in-memory delivery queue is capped by `maxQueueSize` (`1000` tasks by default).
 - Queue overflow follows `overflowStrategy`: `dropOldest`, `dropNewest`, or `block`.
 - Deduplication applies only to `sendMessage`; an entry is added to the dedup cache only after all message parts are delivered successfully.

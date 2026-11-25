@@ -1,6 +1,7 @@
-import dns from 'node:dns';
+import { once } from 'node:events';
 import { createConnection, isIP, Socket } from 'node:net';
 import { finished } from 'node:stream';
+import { connectToProxy, lookupAddresses } from './proxy-dns';
 
 export class SocksAuthenticationError extends Error {
   constructor() {
@@ -21,7 +22,7 @@ export async function connectSocks5(
 ): Promise<Socket> {
   const addresses =
     proxy.protocol === 'socks5:' && !isIP(target.host)
-      ? await lookupSocksTarget(target.host, signal)
+      ? (await lookupAddresses(target.host, signal)).map(({ address }) => address)
       : [target.host];
 
   for (const [index, host] of addresses.entries()) {
@@ -42,33 +43,25 @@ export async function connectSocks5(
   throw new Error('DNS не вернул ни одного адреса для SOCKS5');
 }
 
-function lookupSocksTarget(host: string, signal: AbortSignal): Promise<string[]> {
-  signal.throwIfAborted();
-  return new Promise((resolve, reject) => {
-    // Системный lookup не отменяется, но поздний результат уже не откроет сокет.
-    const abort = () => reject(signal.reason);
-    signal.addEventListener('abort', abort, { once: true });
-    dns.lookup(host, { all: true }, (error, addresses) => {
-      signal.removeEventListener('abort', abort);
-      if (error) reject(error);
-      else resolve(addresses.map(({ address }) => address));
-    });
-  });
-}
-
 async function openSocksTunnel(
   proxy: URL,
   target: { host: string; port: number },
   signal: AbortSignal,
 ): Promise<Socket> {
-  signal.throwIfAborted();
-  const socket = createConnection({
-    host: proxy.hostname.replace(/^\[|\]$/g, ''),
-    port: proxy.port ? Number(proxy.port) : 1080,
-    signal,
+  const host = proxy.hostname.replace(/^\[|\]$/g, '');
+  const socket = await connectToProxy(host, signal, async (lookup) => {
+    const connection = createConnection({
+      ...lookup,
+      host,
+      port: proxy.port ? Number(proxy.port) : 1080,
+      signal,
+    });
+    await once(connection, 'connect');
+    return connection;
   });
 
   try {
+    signal.throwIfAborted();
     // Только CONNECT и методы без авторизации / логин-пароль (RFC 1928 и 1929).
     // Сокетом владеет этот handshake: нет отдельного таймера или вывода userinfo в DEBUG.
     const user = Buffer.from(decodeURIComponent(proxy.username));
