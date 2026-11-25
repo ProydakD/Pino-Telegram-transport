@@ -79,7 +79,8 @@ export async function requestTelegram(
   if (!agent) return fetch(url, options);
 
   const { signal, body } = options;
-  const multipart = body instanceof FormData ? new Response(body) : undefined;
+  // На Node 18 с --no-experimental-fetch глобальных FormData и Response нет.
+  const multipart = body === undefined || typeof body === 'string' ? undefined : new Response(body);
   try {
     return await new Promise<TelegramHttpResponse>((resolve, reject) => {
       const req = agent.createRequest(url, {
@@ -116,7 +117,7 @@ export async function requestTelegram(
         // Writable.toWeb не принимает ClientRequest, поэтому адаптируем источник.
         pipeline(Readable.fromWeb(multipart.body as ReadableStream), req, { signal }).catch(reject);
       } else {
-        req.end(body);
+        req.end(typeof body === 'string' ? body : undefined);
       }
     });
   } catch (error) {

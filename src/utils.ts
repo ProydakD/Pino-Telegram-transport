@@ -799,9 +799,9 @@ export function createRequestTimeout(
   timeoutMs: number,
   parentSignal?: AbortSignal,
 ): RequestTimeoutContext {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+  const hasDeadline = Number.isFinite(timeoutMs) && timeoutMs > 0;
+  if (!hasDeadline && !parentSignal) {
     return {
-      signal: parentSignal,
       dispose: () => {},
       didTimeout: () => false,
     };
@@ -809,14 +809,17 @@ export function createRequestTimeout(
 
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timer = hasDeadline
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : undefined;
 
-  timer.unref?.();
+  timer?.unref();
 
-  // Отмена по destroy() не является таймаутом. Подписка работает и на Node 18.12.
+  // Ранний fetch не очищает слушатели на переданном сигнале. Даже без таймера
+  // даём ему сигнал отдельной попытки и в dispose отвязываем его от родителя.
   const abort = () => {
     clearTimeout(timer);
     controller.abort(parentSignal?.reason);

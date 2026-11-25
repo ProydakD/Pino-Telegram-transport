@@ -4,6 +4,7 @@ const { run } = require('./run.cjs');
 const { startApi, startConnect, startSocks } = require('./servers.cjs');
 
 const cli = require.resolve('../../dist/cli');
+const transport = join(__dirname, 'legacy-transport.cjs');
 
 function checkDebug(result, marker, action) {
   // При провале сообщаем только факт, не копируя потенциально чувствительный stderr.
@@ -48,6 +49,38 @@ async function main() {
     assert.deepEqual(https.serverNames, ['localhost']);
     assert.equal(api.requests.length, 8);
     assert.deepEqual([http.targets.length, https.targets.length, socks.targets.length], [2, 1, 1]);
+
+    // Независимые процессы: сбой GET не должен скрыть проверку POST и отмены.
+    const noFetch = ['--no-experimental-fetch'];
+    const from = api.requests.length;
+    const checks = await Promise.all([
+      run(api, http.url, [...noFetch, cli, 'check']),
+      run(api, http.url, [...noFetch, transport, 'json']),
+      run(api, undefined, [transport, 'no-timeout'], { timeout: 15000 }),
+    ]);
+    const labels = [
+      'CLI without fetch',
+      'proxied JSON without fetch',
+      'direct POST and cancellation',
+    ];
+    assert.deepEqual(
+      checks.flatMap(({ code, stderr }, index) =>
+        code !== 0 || /MaxListenersExceededWarning/.test(stderr)
+          ? [`${labels[index]} (exit ${code}): ${stderr.trim()}`]
+          : [],
+      ),
+      [],
+    );
+    assert.deepEqual(
+      api.requests
+        .slice(from)
+        .map(({ verb, method }) => `${verb} ${method}`)
+        .sort(),
+      ['GET getChat', 'GET getMe', 'POST sendMessage'],
+    );
+    console.log(
+      `${process.version}: GET and JSON without fetch; 50 POSTs and destroy without a deadline`,
+    );
   } finally {
     for (const cleanup of cleanups) await cleanup();
   }

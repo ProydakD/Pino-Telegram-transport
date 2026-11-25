@@ -35,7 +35,7 @@ async function startApi(t, replies = []) {
   const server = https.createServer(tls, async (req, res) => {
     const url = new URL(req.url, 'https://localhost');
     const method = url.pathname.split('/').pop();
-    requests.push({ method, url, headers: req.headers, body: await buffer(req) });
+    requests.push({ method, verb: req.method, url, headers: req.headers, body: await buffer(req) });
     const reply = (Array.isArray(replies) ? replies.shift() : replies(url)) ?? 200;
     if (typeof reply === 'function') return reply(res);
     const status = reply;
