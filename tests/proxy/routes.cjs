@@ -80,6 +80,32 @@ test('a deadline while reading HTTP 200 retains the status and does not repeat t
   assert.equal(api.requests.length, 1);
 });
 
+for (const [status, attempts] of [[502, '1'], [200, '3']]) {
+  test(`direct delivery logs HTTP ${status} without exposing an unreadable response body`, async (t) => {
+    const body = '<html>private-response-fixture</html>';
+    const api = await startApi(t, [
+      (res) => {
+        if (status === 502) {
+          res.writeHead(status, { 'content-type': 'text/html' });
+          res.end(body);
+        } else {
+          res.writeHead(status, { 'content-type': 'application/json', 'content-length': 100 });
+          res.write(body);
+          res.socket.end();
+        }
+      },
+    ]);
+    const result = await run(api, undefined, [sender, 'default-error'], {
+      env: { FIXTURE_ATTEMPTS: attempts, FIXTURE_API_HOST: '127.0.0.1' },
+    });
+    checkExit(result, 0);
+    assert.match(result.stderr, /Ошибка доставки/);
+    assert.match(result.stderr, new RegExp(`HTTP ${status}`));
+    assert.doesNotMatch(result.stderr, /private-response-fixture/);
+    assert.deepEqual(api.requests.map(({ method }) => method), ['sendMessage']);
+  });
+}
+
 test('CLI: flag wins over env; no publication without probe; probe and delete use the same route', async (t) => {
   const api = await startApi(t);
   const proxy = await startConnect(t, api.port, 'http', false);

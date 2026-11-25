@@ -110,9 +110,9 @@ export class TelegramClient {
         );
 
         const data = (await response.json().catch(() => {
-          // Ошибка JSON может содержать фрагмент тела. Для решения о повторе достаточно статуса.
+          // Фрагмент тела может быть чувствительным; для журнала и решения о повторе нужен только статус.
           throw new TelegramDeliveryError(
-            `Не удалось прочитать ответ Telegram (${request.method})`,
+            `Не удалось прочитать ответ Telegram (${request.method}, HTTP ${response.status})`,
             undefined,
             response.status,
           );

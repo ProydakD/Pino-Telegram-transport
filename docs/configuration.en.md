@@ -79,6 +79,7 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 - Configuration errors disable the transport and print a warning by default; `failOnInitError: true` switches this behaviour to throwing.
 - The client retries `429`, `5xx`, and temporary network errors (including timeouts before HTTP headers). SOCKS authentication failures, SOCKS CONNECT replies `2` and `7`, and known certificate verification errors on the proxied route are not retried. If reading the body fails after `2xx`, the client does not resend the POST: the server may already have processed it.
 - Telegram `retry_after` hints are honoured as the minimum delay before the next attempt.
+- If Telegram's response body cannot be read, the delivery error includes the HTTP status but not the raw body.
 - A custom `send` function receives `(payload, method)` and may implement any delivery strategy.
 
 ## Message Headings
