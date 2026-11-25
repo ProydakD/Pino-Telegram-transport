@@ -132,6 +132,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     retryInitialDelay,
     retryBackoffFactor,
     retryMaxDelay,
+    proxyRetryAfterLimit: Math.max(0, options.retryMaxDelay ?? DEFAULT_RETRY_MAX_DELAY),
     requestTimeoutMs,
     formatMessage: options.formatMessage ?? resolveBuiltInFormatter(formatPreset),
     onDeliveryError: options.onDeliveryError,

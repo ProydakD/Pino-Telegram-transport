@@ -188,6 +188,8 @@ export interface NormalizedOptions {
   retryInitialDelay: number;
   retryBackoffFactor: number;
   retryMaxDelay: number;
+  /** Порог подсказки CONNECT до нормализации предела backoff. */
+  proxyRetryAfterLimit: number;
   requestTimeoutMs: number;
   formatMessage?: TelegramTransportOptions['formatMessage'];
   onDeliveryError?: TelegramTransportOptions['onDeliveryError'];

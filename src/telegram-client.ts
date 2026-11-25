@@ -443,7 +443,10 @@ export class TelegramClient {
 
         const cause = error instanceof TelegramDeliveryError ? error.cause : undefined;
         const proxyFailure = cause instanceof ProxyConnectError ? cause : undefined;
-        if (proxyFailure?.retryAfterMs !== undefined && proxyFailure.retryAfterMs > retryMaxDelay) {
+        if (
+          proxyFailure?.retryAfterMs !== undefined &&
+          proxyFailure.retryAfterMs > this.options.proxyRetryAfterLimit
+        ) {
           // Этот отказ не откладывает очередь и не сдвигает IP для следующей записи.
           throw error;
         }

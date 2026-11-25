@@ -119,6 +119,26 @@ test('Telegram: retry_after above retryMaxDelay still controls the next POST', a
   assert.deepEqual(methods(api), ['POST sendMessage', 'POST sendMessage']);
 });
 
+for (const [cap, expectedConnects] of [[500, 1], [1000, 2]]) {
+  test(`CONNECT: configured cap ${cap} stays below the initial backoff`, async (t) => {
+    const api = await startApi(t);
+    let connects = 0;
+    const proxy = await startConnect(t, api.port, 'http', false, {
+      onConnect(socket, accept) {
+        if (++connects === 1) refuse(socket, 503, '1');
+        else accept();
+      },
+    });
+    const result = await run(api, proxy.url, [sender, 'direct'], {
+      env: { ...retryClock, FIXTURE_INITIAL_DELAY: '1200', FIXTURE_MAX_DELAY: String(cap) },
+    });
+    assert.equal(result.code, cap === 500 ? 1 : 0, result.output);
+    assert.equal(connects, expectedConnects);
+    assert.equal(api.requests.length, expectedConnects - 1);
+    assert.deepEqual(plannedWaits(result), cap === 500 ? [] : [1200]);
+  });
+}
+
 for (const status of [429, 503]) {
   test(`CONNECT: HTTP ${status} advances to the next proxy IP on the allowed retry`, async (t) => {
     const api = await startApi(t);
