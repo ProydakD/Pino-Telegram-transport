@@ -36,7 +36,7 @@ async function startApi(t, replies = []) {
     const url = new URL(req.url, 'https://localhost');
     const method = url.pathname.split('/').pop();
     requests.push({ method, url, headers: req.headers, body: await buffer(req) });
-    const reply = replies.shift() ?? 200;
+    const reply = (Array.isArray(replies) ? replies.shift() : replies(url)) ?? 200;
     if (typeof reply === 'function') return reply(res);
     const status = reply;
     const result = {
@@ -87,38 +87,64 @@ async function readBytes(socket, length) {
   return bytes;
 }
 
-async function startSocks(t, apiPort, protocol, auth) {
+async function startSocks(
+  t,
+  apiPort,
+  protocol,
+  { credentials, beforeGreeting, connectReply } = {},
+) {
   const targets = [];
+  let authAttempts = 0;
   const server = net.createServer((socket) => {
     async function handshake() {
       const greeting = await readBytes(socket, 2);
       const methods = await readBytes(socket, greeting[1]);
-      const method = auth ? 2 : 0;
+      await beforeGreeting?.(socket);
+      if (!socket.writable) return;
+      const method = credentials ? 2 : 0;
       if (greeting[0] !== 5 || !methods.includes(method)) return socket.end(Buffer.from([5, 255]));
       socket.write(Buffer.from([5, method]));
-      if (auth) {
+      if (credentials) {
+        authAttempts++;
         const [, userLength] = await readBytes(socket, 2);
         const user = await readBytes(socket, userLength);
         const [passLength] = await readBytes(socket, 1);
         const pass = await readBytes(socket, passLength);
-        if (user.toString() !== 'user' || pass.toString() !== password)
+        if (user.toString() !== credentials.user || pass.toString() !== credentials.password)
           return socket.end(Buffer.from([1, 1]));
         socket.write(Buffer.from([1, 0]));
       }
       const [version, command, , type] = await readBytes(socket, 4);
       if (version !== 5 || command !== 1 || ![1, 3, 4].includes(type)) return socket.destroy();
       const length = type === 3 ? (await readBytes(socket, 1))[0] : type === 1 ? 4 : 16;
-      const host = await readBytes(socket, length);
+      const address = await readBytes(socket, length);
       const port = (await readBytes(socket, 2)).readUInt16BE();
-      targets.push({ type, host: type === 3 ? host.toString() : [...host].join('.'), port });
+      const host =
+        type === 3
+          ? address.toString()
+          : type === 1
+            ? [...address].join('.')
+            : Array.from({ length: 8 }, (_, i) => address.readUInt16BE(i * 2).toString(16)).join(
+                ':',
+              );
+      const target = { type, host, port };
+      targets.push(target);
+      const reply = connectReply?.(target) ?? 0;
+      if (reply) return socket.end(Buffer.from([5, reply, 0, 1, 0, 0, 0, 0, 0, 0]));
       tunnel(socket, apiPort, Buffer.from([5, 0, 0, 1, 127, 0, 0, 1, 0, 0]));
     }
     handshake().catch(() => socket.destroy());
   });
   const port = await listen(t, server);
+  const userinfo = credentials
+    ? `${encodeURIComponent(credentials.user)}:${encodeURIComponent(credentials.password)}@`
+    : '';
   return {
     targets,
-    url: `${protocol}://${auth ? 'user:' + encodeURIComponent(password) + '@' : ''}127.0.0.1:${port}`,
+    get authAttempts() {
+      return authAttempts;
+    },
+    url: `${protocol}://${userinfo}127.0.0.1:${port}`,
   };
 }
 

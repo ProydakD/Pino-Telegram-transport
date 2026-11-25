@@ -8,6 +8,7 @@ import {
   redactTelegramDiagnostic,
   requestTelegram,
 } from './telegram-http';
+import { TelegramProxyAgent } from './telegram-proxy-agent';
 
 interface CliContext {
   stdout: (message: string) => void;
@@ -126,8 +127,14 @@ export async function runCli(
   }
 
   switch (command) {
-    case 'check':
-      return await handleCheck(options, context, proxy);
+    case 'check': {
+      const agent = proxy && new TelegramProxyAgent(proxy);
+      try {
+        return await handleCheck(options, context, agent);
+      } finally {
+        agent?.destroy();
+      }
+    }
     case 'generate-config':
       return await handleGenerateConfig(options, context, proxy);
     default:
@@ -284,7 +291,11 @@ function applyPositionalShortcuts(
  * @param context Контекст ввода-вывода CLI.
  * @returns Код завершения команды.
  */
-async function handleCheck(options: CliOptions, context: CliContext, proxy?: URL): Promise<number> {
+async function handleCheck(
+  options: CliOptions,
+  context: CliContext,
+  agent?: TelegramProxyAgent,
+): Promise<number> {
   const tokenCandidate = pickOption(options, ['token', 'botToken']);
   if (typeof tokenCandidate === 'boolean') {
     context.stderr('Флаг --token требует значения.');
@@ -299,7 +310,7 @@ async function handleCheck(options: CliOptions, context: CliContext, proxy?: URL
   context.stdout('Проверка токена…');
   let bot: BotInfo;
   try {
-    bot = await callTelegram<BotInfo>(token, proxy, 'getMe');
+    bot = await callTelegram<BotInfo>(token, agent, 'getMe');
     context.stdout(`✅ Токен действителен: ${formatBot(bot)}`);
   } catch (error) {
     context.stderr(formatTelegramError('Не удалось проверить токен', error));
@@ -319,7 +330,7 @@ async function handleCheck(options: CliOptions, context: CliContext, proxy?: URL
   for (const chatId of chats) {
     context.stdout(`Проверка чата ${chatId}…`);
     try {
-      const chat = await callTelegram<ChatInfo>(token, proxy, 'getChat', { chat_id: chatId });
+      const chat = await callTelegram<ChatInfo>(token, agent, 'getChat', { chat_id: chatId });
       context.stdout(`✅ Чат доступен: ${formatChat(chat)}`);
       reachableChats.push(chatId);
     } catch (error) {
@@ -372,7 +383,7 @@ async function handleCheck(options: CliOptions, context: CliContext, proxy?: URL
 
     context.stdout(`Проверка отправки пробного сообщения в ${probeDescription}…`);
     try {
-      const probe = await callTelegram<SentMessage>(token, proxy, 'sendMessage', {
+      const probe = await callTelegram<SentMessage>(token, agent, 'sendMessage', {
         chat_id: chatId,
         message_thread_id: parsedThread.value,
         text:
@@ -382,7 +393,7 @@ async function handleCheck(options: CliOptions, context: CliContext, proxy?: URL
         disable_notification: true,
       });
       try {
-        await callTelegram<boolean>(token, proxy, 'deleteMessage', {
+        await callTelegram<boolean>(token, agent, 'deleteMessage', {
           chat_id: chatId,
           message_id: probe.message_id,
         });
@@ -569,20 +580,16 @@ function parseThreadId(value?: string): { value?: number; error?: string } {
  */
 async function callTelegram<T>(
   token: string,
-  proxy: URL | undefined,
+  agent: TelegramProxyAgent | undefined,
   method: string,
   params?: Record<string, unknown>,
 ): Promise<T> {
   const url = buildTelegramMethodUrl(token, method, params);
   const timeout = createRequestTimeout(CLI_REQUEST_TIMEOUT_MS);
+  const proxy = agent?.getProxyUrl();
 
   try {
-    const response = await requestTelegram(
-      url,
-      { signal: timeout.signal },
-      proxy,
-      CLI_REQUEST_TIMEOUT_MS,
-    );
+    const response = await requestTelegram(url, { signal: timeout.signal }, agent);
 
     let data: TelegramResponse<T> | undefined;
     try {

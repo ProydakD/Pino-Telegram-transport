@@ -19,6 +19,7 @@ async function main() {
         retryAttempts: 1,
       }),
     );
+    fixture.after(() => client.close());
 
     const bytes = Buffer.from([0, 255, 13, 10, 128]);
     for (const [kind, method] of [

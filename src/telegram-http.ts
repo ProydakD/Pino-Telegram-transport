@@ -1,12 +1,10 @@
-import dns from 'node:dns';
-import { request } from 'node:https';
 import { Readable } from 'node:stream';
 import { json as readJson } from 'node:stream/consumers';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { domainToASCII } from 'node:url';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import { SocksProxyAgent } from 'socks-proxy-agent';
+import { SocksAuthenticationError } from './socks5';
+import type { TelegramProxyAgent } from './telegram-proxy-agent';
 
 export class ProxyConfigurationError extends Error {}
 
@@ -29,17 +27,23 @@ export function parseProxyUrl(value: unknown): URL | undefined {
   if (typeof value === 'string' && /^(?:https?|socks5h?):\/\/[^/\\?#\s]+\/?$/i.test(value)) {
     try {
       const url = new URL(value);
-      // Оба агента декодируют userinfo. Ошибка escape-последовательности — ошибка настройки.
-      decodeURIComponent(url.username);
-      decodeURIComponent(url.password);
+      // Ошибка escape-последовательности — ошибка настройки до любых сетевых попыток.
+      const username = decodeURIComponent(url.username);
+      const password = decodeURIComponent(url.password);
       // WHATWG URL не нормализует hostname у нестандартных схем socks5(h).
       if (url.protocol.startsWith('socks5')) {
+        if (Buffer.byteLength(username) > 255 || Buffer.byteLength(password) > 255) {
+          throw new ProxyConfigurationError(
+            'proxyUrl: логин и пароль SOCKS5 — не более 255 байт каждый',
+          );
+        }
         const hostname = domainToASCII(url.hostname);
         if (!hostname) throw new TypeError();
         url.hostname = hostname;
       }
       if (url.hostname && url.port !== '0') return url;
-    } catch {
+    } catch (error) {
+      if (error instanceof ProxyConfigurationError) throw error;
       // Ошибка URL может содержать исходную строку вместе с паролем.
     }
   }
@@ -58,42 +62,22 @@ type TelegramHttpResponse = Pick<Response, 'ok' | 'status' | 'statusText' | 'jso
 export async function requestTelegram(
   url: string,
   options: TelegramHttpOptions,
-  proxy: URL | undefined,
-  timeoutMs: number,
+  agent?: TelegramProxyAgent,
 ): Promise<TelegramHttpResponse> {
-  if (!proxy) return fetch(url, options);
+  if (!agent) return fetch(url, options);
 
-  // До завершения CONNECT у ClientRequest ещё нет сокета. Ограничиваем и handshake
-  // самого агента, а не только чтение ответа Telegram.
   const { signal, body } = options;
-  const agent = createProxyAgent(proxy, signal, timeoutMs);
   const multipart = body instanceof FormData ? new Response(body) : undefined;
   try {
     return await new Promise<TelegramHttpResponse>((resolve, reject) => {
-      signal?.throwIfAborted();
-      const req = request(url, {
-        agent,
+      const req = agent.createRequest(url, {
         method: options.method,
         headers: multipart
           ? { 'content-type': multipart.headers.get('content-type')! }
           : options.headers,
         signal,
-        // Если локальный DNS завершился уже после дедлайна, не начинаем SOCKS handshake.
-        lookup:
-          proxy.protocol === 'socks5:' && signal
-            ? (host, _, done) =>
-                dns.lookup(host, (err, address, family) =>
-                  done(signal.aborted ? signal.reason : err, address, family),
-                )
-            : undefined,
       });
       req.once('error', reject);
-      if (signal) {
-        // До выдачи сокета агентом req.destroy() откладывает событие error.
-        const abort = () => reject(signal.reason);
-        signal.addEventListener('abort', abort, { once: true });
-        req.once('close', () => signal.removeEventListener('abort', abort));
-      }
       req.once('proxyConnect', ({ statusCode }: { statusCode: number }) => {
         if (statusCode !== 200) {
           // Текст отказа CONNECT не является ответом Bot API и может содержать userinfo.
@@ -124,31 +108,10 @@ export async function requestTelegram(
       }
     });
   } catch (error) {
-    agent.destroy();
+    if (error instanceof SocksAuthenticationError) throw error;
     // Ошибки агента могут содержать разобранный запрос или ответ прокси, включая секреты.
     const code = (error as NodeJS.ErrnoException)?.code;
-    const reason = code && /^[A-Z_0-9]+$/.test(code) ? ` (${code})` : '';
+    const reason = typeof code === 'string' && /^[A-Z_0-9]+$/.test(code) ? ` (${code})` : '';
     throw new Error(`Не удалось выполнить запрос через прокси${reason}`);
   }
-}
-
-function createProxyAgent(proxy: URL, signal: AbortSignal | undefined, timeoutMs: number) {
-  if (proxy.protocol.startsWith('socks5')) {
-    const agent = new SocksProxyAgent(proxy, { timeout: timeoutMs || undefined });
-    // URL хранит IPv6 в скобках, а socket.connect ожидает сам адрес.
-    agent.proxy.host = proxy.hostname.replace(/^\[|\]$/g, '');
-    return agent;
-  }
-  // Агент пишет переданный URL в DEBUG; передаём учётные данные только в CONNECT.
-  const address = new URL(proxy.href);
-  address.username = '';
-  address.password = '';
-  const credentials = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
-  return new HttpsProxyAgent(address, {
-    signal,
-    headers: () =>
-      proxy.username || proxy.password
-        ? { 'Proxy-Authorization': `Basic ${Buffer.from(credentials).toString('base64')}` }
-        : {},
-  });
 }

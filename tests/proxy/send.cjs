@@ -35,7 +35,9 @@ async function main() {
       'binary fixture',
     );
   } else {
-    logger.info('text fixture');
+    for (let index = 0; index < Number(process.env.FIXTURE_MESSAGES || 1); index++) {
+      logger.info(`text fixture ${index}`);
+    }
   }
   const closed = once(stream, 'close');
   stream.end();

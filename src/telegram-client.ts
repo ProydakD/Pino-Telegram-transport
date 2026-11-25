@@ -1,5 +1,7 @@
 import { buildTelegramUrl, createRequestTimeout } from './utils';
 import { redactTelegramDiagnostic, requestTelegram } from './telegram-http';
+import { TelegramProxyAgent } from './telegram-proxy-agent';
+import { SocksAuthenticationError } from './socks5';
 import {
   NormalizedOptions,
   TelegramInputFile,
@@ -46,7 +48,15 @@ export class TelegramDeliveryError extends Error {
  * Отвечает за подготовку multipart-запросов, повторные попытки и нормализацию бинарных полей.
  */
 export class TelegramClient {
-  constructor(private readonly options: NormalizedOptions) {}
+  private readonly proxyAgent?: TelegramProxyAgent;
+
+  constructor(private readonly options: NormalizedOptions) {
+    if (options.proxyUrl) this.proxyAgent = new TelegramProxyAgent(options.proxyUrl);
+  }
+
+  close(): void {
+    this.proxyAgent?.destroy();
+  }
 
   /**
    * Отправляет запрос в Telegram, выполняя повторные попытки при временных ошибках.
@@ -73,8 +83,7 @@ export class TelegramClient {
             body,
             signal: timeout.signal,
           },
-          this.options.proxyUrl,
-          this.options.requestTimeoutMs,
+          this.proxyAgent,
         );
 
         const data = (await response.json().catch(() => {
@@ -413,6 +422,7 @@ export class TelegramClient {
    */
   private isRetryable(error: unknown): boolean {
     if (error instanceof TelegramDeliveryError) {
+      if (error.cause instanceof SocksAuthenticationError) return false;
       // После заголовков решение зависит от статуса, даже если чтение тела истекло по таймауту.
       const code = this.resolveStatusCode(error);
       if (code === 429) {

@@ -465,6 +465,7 @@ describe('pino-telegram transport', () => {
     ['https://t.me/proxy?server=localhost&secret=fixture-password', undefined],
     ['http://user:fixture-password@localhost:70000', undefined],
     ['socks5://user:%ZZfixture-password@localhost', undefined],
+    [`socks5h://user:${encodeURIComponent('я'.repeat(128))}@127.0.0.1:1`, undefined],
     ['socks5://%00:1080', undefined],
     ['', undefined],
     ['http://user:fixture-password@localhost', vi.fn()],
@@ -482,7 +483,7 @@ describe('pino-telegram transport', () => {
         await new Promise<void>((resolve) => stream.flush(() => resolve()));
         expect(warn).toHaveBeenCalledOnce();
         expect(warn.mock.calls.flat().join(' ')).toContain('transport disabled');
-        expect(warn.mock.calls.flat().join(' ')).not.toMatch(/fixture-password|123:ABC/);
+        expect(warn.mock.calls.flat().join(' ')).not.toMatch(/fixture-password|123:ABC|яя|%D1%8F/i);
         expect(() => telegramTransport({ ...options, failOnInitError: true })).toThrow(/proxyUrl/);
         expect(fetch).not.toHaveBeenCalled();
         if (send) expect(send).not.toHaveBeenCalled();

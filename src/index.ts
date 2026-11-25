@@ -92,6 +92,10 @@ export default function telegramTransport(options: TelegramTransportOptions) {
 
   const stream = new Writable({
     highWaterMark: TRANSPORT_HIGH_WATER_MARK,
+    destroy(error, callback) {
+      client.close();
+      callback(error);
+    },
     write(chunk, _encoding, callback) {
       activeWrites += 1;
       void consumeChunk(chunk, false)
