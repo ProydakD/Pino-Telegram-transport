@@ -1,4 +1,4 @@
-﻿# Configuration
+# Configuration
 
 English version · [Русская версия](configuration.ru.md)
 

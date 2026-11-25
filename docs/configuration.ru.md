@@ -1,4 +1,4 @@
-﻿# Конфигурация
+# Конфигурация
 
 Русская версия · [English version](configuration.en.md)
 

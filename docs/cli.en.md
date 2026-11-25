@@ -1,4 +1,4 @@
-﻿# CLI reference
+# CLI reference
 
 English version · [Русская версия](cli.ru.md)
 
