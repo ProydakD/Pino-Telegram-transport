@@ -68,7 +68,8 @@ test('HTTPS proxy: weak certificate key is permanent without relaxing client TLS
     assert.equal(result.status, 0, result.error?.message ?? result.stderr);
   }
   const read = (name) => readFileSync(join(dir, name));
-  // Только сервер стенда допускает слабый ключ; TLS клиента остаётся штатным.
+  // Только сервер стенда допускает слабый ключ. Клиент проверяет цепочку и имя;
+  // SECLEVEL=2 делает порог ключа одинаковым на Node 18, 20 и 24, не ослабляя TLS.
   const server = https.createServer({
     key: read('leaf.key'),
     cert: read('leaf.pem'),
@@ -85,6 +86,7 @@ test('HTTPS proxy: weak certificate key is permanent without relaxing client TLS
   const result = await promisify(execFile)(
     process.execPath,
     [
+      '--tls-cipher-list=DEFAULT@SECLEVEL=2',
       '-e',
       `
     const { TelegramClient } = require('./dist/telegram-client');
