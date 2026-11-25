@@ -67,7 +67,7 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 ## Client Behaviour
 
 - Without `proxyUrl` the client uses the existing `fetch` route. Set `proxyUrl: process.env.TELEGRAM_PROXY_URL` in the transport options (worker or direct stream) to opt into a proxy. The transport does not read that variable automatically.
-- Use a server URL such as `http://proxy.example:8080`, `https://proxy.example:8443`, or `socks5h://proxy.example:1080`; optional username and password are URL-encoded. For SOCKS5, each field is limited to 255 UTF-8 bytes after decoding. MTProxy links are not supported.
+- Use a server URL such as `http://proxy.example:8080`, `https://proxy.example:8443`, or `socks5h://proxy.example:1080`. URL-encode credentials if supplied. SOCKS5 requires both username and password or neither; each provided field must be 1–255 UTF-8 bytes after decoding. HTTP(S) Basic usernames cannot contain a colon, even URL-encoded; passwords can. MTProxy links are not supported.
 - With `socks5://` the client resolves the Bot API hostname and can try other returned addresses if the proxy reports a connection failure for the chosen address. With `socks5h://` the proxy resolves the name. A proxy failure never triggers a direct connection.
 - Proxied requests use Node HTTPS with TLS verification enabled. Text, photos, documents, and topic messages use the same route; a transport reuses its established tunnels when the server supports keep-alive. An invalid URL or a conflict with `send` is an initialization error.
 - If a proxy hostname resolves to multiple addresses, a TCP connection failure can move on to the next address. HTTPS proxies are still verified against their original hostname.

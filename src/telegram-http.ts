@@ -38,6 +38,9 @@ export function parseProxyUrl(value: unknown): URL | undefined {
       const password = decodeURIComponent(url.password);
       // WHATWG URL не нормализует hostname у нестандартных схем socks5(h).
       if (url.protocol.startsWith('socks5')) {
+        if (Boolean(username) !== Boolean(password)) {
+          throw new ProxyConfigurationError('proxyUrl: для SOCKS5 укажите и логин, и пароль');
+        }
         if (Buffer.byteLength(username) > 255 || Buffer.byteLength(password) > 255) {
           throw new ProxyConfigurationError(
             'proxyUrl: логин и пароль SOCKS5 — не более 255 байт каждый',
@@ -46,6 +49,9 @@ export function parseProxyUrl(value: unknown): URL | undefined {
         const hostname = domainToASCII(url.hostname);
         if (!hostname) throw new TypeError();
         url.hostname = hostname;
+      } else if (username.includes(':')) {
+        // HTTP Basic разделяет логин и пароль по первому двоеточию после декодирования.
+        throw new ProxyConfigurationError('proxyUrl: логин HTTP(S)-прокси не должен содержать ":"');
       }
       if (url.hostname && url.port !== '0') return url;
     } catch (error) {

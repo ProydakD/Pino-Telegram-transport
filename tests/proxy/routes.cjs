@@ -311,6 +311,38 @@ for (const field of ['username', 'password']) {
   });
 }
 
+for (const [protocol, userinfo, diagnostic] of [
+  ['socks5', 'credential-fixture', /укажите и логин, и пароль/],
+  ['socks5h', ':credential-fixture', /укажите и логин, и пароль/],
+  ['http', 'credential-fixture%3Auser:pass', /логин HTTP\(S\)-прокси/],
+  ['https', 'credential-fixture%3Auser:pass', /логин HTTP\(S\)-прокси/],
+]) {
+  test(`${protocol}: invalid credentials are rejected before TCP`, async (t) => {
+    let connections = 0;
+    const port = await listen(
+      t,
+      net.createServer((socket) => {
+        connections++;
+        socket.destroy();
+      }),
+    );
+    const proxyUrl = `${protocol}://${userinfo}@127.0.0.1:${port}`;
+    assert.throws(
+      () => telegramTransport({ botToken: token, chatId: 42, proxyUrl, failOnInitError: true }),
+      diagnostic,
+    );
+    const check = await run({ port }, proxyUrl, [cli, 'check']);
+    checkExit(check, 1);
+    assert.match(check.stderr, diagnostic);
+    const delivery = await run({ port }, proxyUrl, [sender, 'direct']);
+    checkExit(delivery, 0);
+    assert.match(delivery.stderr, /transport disabled:/);
+    assert.match(delivery.stderr, diagnostic);
+    assert.ok(!(check.output + delivery.output).includes('credential-fixture'));
+    assert.equal(connections, 0);
+  });
+}
+
 for (const [reply, acceptsFallback] of [
   [8, true],
   [2, false],
