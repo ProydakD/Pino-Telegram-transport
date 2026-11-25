@@ -1,5 +1,6 @@
 import { StringDecoder } from 'node:string_decoder';
 import { Writable } from 'node:stream';
+import { inspect } from 'node:util';
 import { buildMessage } from './formatter';
 import { RateLimiter, TaskQueue } from './rate-limiter';
 import { createTextMessageDedupKey, TextMessageDeduper } from './text-message-deduper';
@@ -21,6 +22,7 @@ import {
   TelegramTransportOptions,
 } from './types';
 import { TelegramClient, TelegramDeliveryError } from './telegram-client';
+import { ProxyConfigurationError, redactTelegramDiagnostic } from './telegram-http';
 
 export type {
   TelegramTransportOptions,
@@ -90,6 +92,11 @@ export default function telegramTransport(options: TelegramTransportOptions) {
 
   const stream = new Writable({
     highWaterMark: TRANSPORT_HIGH_WATER_MARK,
+    destroy(error, callback) {
+      // При end() очередь уже обработана в final; при destroy() отменяем ожидания и запрос.
+      client.close();
+      callback(error);
+    },
     write(chunk, _encoding, callback) {
       activeWrites += 1;
       void consumeChunk(chunk, false)
@@ -211,11 +218,13 @@ export default function telegramTransport(options: TelegramTransportOptions) {
    */
   async function processLog(log: PinoLog): Promise<void> {
     for (const target of normalized.targets) {
+      if (client.signal.aborted) return;
       if (!shouldSendToTarget(log, target)) {
         continue;
       }
 
       const message = await buildMessage({ log, target, options: normalized }, normalized);
+      if (client.signal.aborted) return;
       let requests: TelegramRequest[];
 
       try {
@@ -232,11 +241,15 @@ export default function telegramTransport(options: TelegramTransportOptions) {
 
       let deliveredAllRequests = true;
       for (const request of requests) {
-        await rateLimiter.wait(getTargetKey(target.chatId), normalized.minDelayBetweenMessages);
-
         try {
+          await rateLimiter.wait(
+            getTargetKey(target.chatId),
+            normalized.minDelayBetweenMessages,
+            client.signal,
+          );
           await client.send(request);
         } catch (error) {
+          if (client.signal.aborted) return;
           handleError(error, request);
           deliveredAllRequests = false;
           break;
@@ -281,7 +294,12 @@ export default function telegramTransport(options: TelegramTransportOptions) {
     }
 
     if (error instanceof TelegramDeliveryError) {
-      console.error('[pino-telegram] Ошибка доставки:', error.message, error.response);
+      const details = redactTelegramDiagnostic(
+        inspect(error.response),
+        normalized.botToken,
+        normalized.proxyUrl,
+      );
+      console.error('[pino-telegram] Ошибка доставки:', error.message, details);
     } else {
       console.error('[pino-telegram] Необработанная ошибка доставки:', error);
     }
@@ -406,7 +424,8 @@ function isConfigurationInitError(error: unknown): error is Error {
   const code = (error as { code?: string } | undefined)?.code;
   return (
     error instanceof Error &&
-    (code === 'MISSING_BOT_TOKEN' ||
+    (error instanceof ProxyConfigurationError ||
+      code === 'MISSING_BOT_TOKEN' ||
       code === 'NO_CHAT_TARGET' ||
       error.message.includes('botToken') ||
       error.message.includes('целевого чата') ||

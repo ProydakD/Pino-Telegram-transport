@@ -1,4 +1,4 @@
-﻿export type ChatIdentifier = string | number;
+export type ChatIdentifier = string | number;
 
 export type TelegramMethod = 'sendMessage' | 'sendPhoto' | 'sendDocument';
 export type TelegramQueueOverflowStrategy = 'dropOldest' | 'dropNewest' | 'block';
@@ -68,6 +68,8 @@ export type TelegramRequest = {
 export interface TelegramTransportOptions {
   /** Токен Telegram-бота. */
   botToken: string;
+  /** Адрес HTTP(S)- или SOCKS5-прокси. Несовместим с пользовательским send. */
+  proxyUrl?: string;
   /** Описание целевых чатов. */
   chatId: RawChatTarget | RawChatTarget[];
   /** Общая тема для всех сообщений (опционально). */
@@ -125,7 +127,7 @@ export interface TelegramTransportOptions {
   retryInitialDelay?: number;
   /** Множитель экспоненциального backoff. */
   retryBackoffFactor?: number;
-  /** Максимальная пауза между попытками (мс). */
+  /** Предел backoff и допустимой подсказки Retry-After от CONNECT (мс), не от Bot API. */
   retryMaxDelay?: number;
   /** Таймаут HTTP-запроса к Telegram (мс). 0 отключает таймаут встроенного клиента. */
   requestTimeoutMs?: number;
@@ -165,6 +167,7 @@ export interface NormalizedTelegramChatTarget extends Omit<TelegramChatTarget, '
 
 export interface NormalizedOptions {
   botToken: string;
+  proxyUrl?: URL;
   targets: NormalizedTelegramChatTarget[];
   parseMode: 'HTML' | 'Markdown' | 'MarkdownV2';
   disableNotification: boolean;
@@ -185,6 +188,8 @@ export interface NormalizedOptions {
   retryInitialDelay: number;
   retryBackoffFactor: number;
   retryMaxDelay: number;
+  /** Порог подсказки CONNECT до нормализации предела backoff. */
+  proxyRetryAfterLimit: number;
   requestTimeoutMs: number;
   formatMessage?: TelegramTransportOptions['formatMessage'];
   onDeliveryError?: TelegramTransportOptions['onDeliveryError'];

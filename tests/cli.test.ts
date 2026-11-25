@@ -75,6 +75,47 @@ afterEach(() => {
 });
 
 describe('CLI утилита', () => {
+  it.each(['json', 'env'])('скрывает весь авторизованный URL в формате %s', async (format) => {
+    const { context, stdoutMessages, stderrMessages } = createContext({
+      TELEGRAM_PROXY_URL: 'socks5h://fixture-user:fixture-password@private.example:1080',
+    });
+    expect(await runCli(['generate-config', '--format', format, '--include-token'], context)).toBe(
+      0,
+    );
+    const output = stdoutMessages.join('\n');
+    expect(output).toContain('<YOUR_PROXY_URL>');
+    expect(output).not.toMatch(/fixture-user|fixture-password|private\.example/);
+    expect(stderrMessages).toEqual([]);
+  });
+
+  it.each(['json', 'env'])(
+    'сохраняет адрес без пароля из флага вместо env (%s)',
+    async (format) => {
+      const { context, stdoutMessages } = createContext({ TELEGRAM_PROXY_URL: 'invalid' });
+      const proxyUrl = 'socks5h://localhost:1080';
+      expect(
+        await runCli(['generate-config', '--format', format, '--proxy-url', proxyUrl], context),
+      ).toBe(0);
+      const output = stdoutMessages.join('\n');
+      if (format === 'json') expect(JSON.parse(output).transport.options.proxyUrl).toBe(proxyUrl);
+      else expect(output.split('\n')).toContain(`TELEGRAM_PROXY_URL=${proxyUrl}`);
+    },
+  );
+
+  it.each(['--proxy-url=', '--proxy-url', '--proxy-url=tg://proxy?secret=fixture-password'])(
+    'отклоняет неверный флаг до сети, не раскрывая секреты (случай %#)',
+    async (flag) => {
+      const { context, stderrMessages } = createContext({
+        TELEGRAM_BOT_TOKEN: '123:ABC',
+        TELEGRAM_PROXY_URL: 'http://localhost:8080',
+      });
+      expect(await runCli(['check', flag], context)).toBe(1);
+      expect(stderrMessages.join('\n')).toContain('--proxy-url');
+      expect(stderrMessages.join('\n')).not.toMatch(/fixture-password|123:ABC/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('показывает справку по умолчанию', async () => {
     const { context, stdoutMessages } = createContext();
 

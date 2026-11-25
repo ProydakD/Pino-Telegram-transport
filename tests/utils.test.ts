@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { escapeHtml, formatTimestamp, splitHtml, splitText, truncateHtml } from '../src/utils';
+import {
+  escapeHtml,
+  formatTimestamp,
+  splitHtml,
+  splitText,
+  truncateHtml,
+  waitForDelay,
+} from '../src/utils';
 
 describe('formatTimestamp', () => {
   it('returns the original string for an invalid date string', () => {
@@ -70,5 +77,24 @@ describe('escapeHtml', () => {
     expect(escapeHtml(`<tag attr="value">'quoted' & text`)).toBe(
       '&lt;tag attr=&quot;value&quot;&gt;&#39;quoted&#39; &amp; text',
     );
+  });
+});
+
+describe('waitForDelay', () => {
+  it('does not shorten a wait beyond the largest Node timer', async () => {
+    vi.useFakeTimers();
+    try {
+      const duration = 2 ** 31 + 5;
+      const signal = new AbortController().signal;
+      const resume = vi.fn();
+      const waiting = waitForDelay(duration, signal).then(resume);
+      await vi.advanceTimersByTimeAsync(duration - 1);
+      expect(resume).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await waiting;
+      expect(resume).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,0 +1,97 @@
+const assert = require('node:assert/strict');
+const { join } = require('node:path');
+const { run } = require('./run.cjs');
+const { startApi, startConnect, startSocks } = require('./servers.cjs');
+
+const cli = require.resolve('../../dist/cli');
+const transport = join(__dirname, 'legacy-transport.cjs');
+
+function checkDebug(result, marker, action) {
+  // При провале сообщаем только факт, не копируя потенциально чувствительный stderr.
+  assert.ok(!result.stderr.includes(marker), `${action}: unexpected test token in HTTP debug`);
+  const encodedAuth = Buffer.from('user:fixture:secret').toString('base64');
+  assert.ok(
+    !/fixture(%3A|:)secret/i.test(result.output) && !result.output.includes(encodedAuth),
+    `${action}: proxy credentials in HTTP debug`,
+  );
+  assert.ok(/HTTP \d+:/.test(result.stderr), `${action}: HTTP debug was not enabled`);
+  assert.equal(result.code, 0, `${action} failed`);
+}
+
+async function main() {
+  // node:test на 18.12.1 ещё не предоставляет t.after.
+  const cleanups = [];
+  const fixture = { after: (cleanup) => cleanups.unshift(cleanup) };
+  try {
+    const api = await startApi(fixture);
+    const http = await startConnect(fixture, api.port, 'http');
+    const debug = { env: { NODE_DEBUG: 'http' } };
+    checkDebug(await run(api, http.url, [cli, 'check'], debug), 'fixture-token', 'CLI check');
+    assert.deepEqual(
+      api.requests.map(({ method }) => method),
+      ['getMe', 'getChat'],
+    );
+    checkDebug(
+      await run(api, http.url, [join(__dirname, 'legacy-multipart.cjs')], debug),
+      'bot0:fixture',
+      'photo and document upload',
+    );
+    console.log(
+      `${process.version}: CLI check, photo and document passed without tokens in HTTP debug`,
+    );
+
+    const https = await startConnect(fixture, api.port, 'https', false);
+    const socks = await startSocks(fixture, api.port, 'socks5h');
+    for (const proxy of [http, https, socks]) {
+      const url = new URL(proxy.url);
+      url.hostname = 'localhost';
+      const result = await run(api, url.href, [cli, 'check'], {
+        env: { FIXTURE_DUAL_STACK: '1', FIXTURE_API_HOST: '127.0.0.1' },
+      });
+      assert.equal(result.code, 0, `${url.protocol} check failed: ${result.output}`);
+      console.log(`${url.protocol} IPv4 proxy reachable after IPv6 refusal`);
+    }
+    assert.deepEqual(https.serverNames, ['localhost']);
+    assert.equal(api.requests.length, 8);
+    assert.deepEqual([http.targets.length, https.targets.length, socks.targets.length], [2, 1, 1]);
+
+    // Независимые процессы: сбой GET не должен скрыть проверку POST и отмены.
+    const noFetch = ['--no-experimental-fetch'];
+    const from = api.requests.length;
+    const checks = await Promise.all([
+      run(api, http.url, [...noFetch, cli, 'check']),
+      run(api, http.url, [...noFetch, transport, 'json']),
+      run(api, undefined, [transport, 'no-timeout'], { timeout: 15000 }),
+    ]);
+    const labels = [
+      'CLI without fetch',
+      'proxied JSON without fetch',
+      'direct POST and cancellation',
+    ];
+    assert.deepEqual(
+      checks.flatMap(({ code, stderr }, index) =>
+        code !== 0 || /MaxListenersExceededWarning/.test(stderr)
+          ? [`${labels[index]} (exit ${code}): ${stderr.trim()}`]
+          : [],
+      ),
+      [],
+    );
+    assert.deepEqual(
+      api.requests
+        .slice(from)
+        .map(({ verb, method }) => `${verb} ${method}`)
+        .sort(),
+      ['GET getChat', 'GET getMe', 'POST sendMessage'],
+    );
+    console.log(
+      `${process.version}: GET and JSON without fetch; 50 POSTs and destroy without a deadline`,
+    );
+  } finally {
+    for (const cleanup of cleanups) await cleanup();
+  }
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 import { writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
+import { ProxyConnectError } from './http-connect';
 import { buildTelegramUrl, createRequestTimeout } from './utils';
+import {
+  parseProxyUrl,
+  ProxyConfigurationError,
+  redactTelegramDiagnostic,
+  requestTelegram,
+} from './telegram-http';
+import { TelegramProxyAgent } from './telegram-proxy-agent';
 
 interface CliContext {
   stdout: (message: string) => void;
@@ -110,11 +118,26 @@ export async function runCli(
 
   applyPositionalShortcuts(command, positionals, options);
 
+  let proxy: URL | undefined;
+  try {
+    proxy = parseProxyUrl(options.proxyUrl ?? context.env.TELEGRAM_PROXY_URL);
+  } catch (error) {
+    if (!(error instanceof ProxyConfigurationError)) throw error;
+    context.stderr(`--proxy-url: ${error.message}`);
+    return 1;
+  }
+
   switch (command) {
-    case 'check':
-      return await handleCheck(options, context);
+    case 'check': {
+      const agent = proxy && new TelegramProxyAgent(proxy, CLI_REQUEST_TIMEOUT_MS);
+      try {
+        return await handleCheck(options, context, agent);
+      } finally {
+        agent?.destroy();
+      }
+    }
     case 'generate-config':
-      return await handleGenerateConfig(options, context);
+      return await handleGenerateConfig(options, context, proxy);
     default:
       context.stderr(`Неизвестная команда: ${command}`);
       printHelp(context);
@@ -269,7 +292,11 @@ function applyPositionalShortcuts(
  * @param context Контекст ввода-вывода CLI.
  * @returns Код завершения команды.
  */
-async function handleCheck(options: CliOptions, context: CliContext): Promise<number> {
+async function handleCheck(
+  options: CliOptions,
+  context: CliContext,
+  agent?: TelegramProxyAgent,
+): Promise<number> {
   const tokenCandidate = pickOption(options, ['token', 'botToken']);
   if (typeof tokenCandidate === 'boolean') {
     context.stderr('Флаг --token требует значения.');
@@ -284,7 +311,7 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
   context.stdout('Проверка токена…');
   let bot: BotInfo;
   try {
-    bot = await callTelegram<BotInfo>(token, 'getMe');
+    bot = await callTelegram<BotInfo>(token, agent, 'getMe');
     context.stdout(`✅ Токен действителен: ${formatBot(bot)}`);
   } catch (error) {
     context.stderr(formatTelegramError('Не удалось проверить токен', error));
@@ -304,7 +331,7 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
   for (const chatId of chats) {
     context.stdout(`Проверка чата ${chatId}…`);
     try {
-      const chat = await callTelegram<ChatInfo>(token, 'getChat', { chat_id: chatId });
+      const chat = await callTelegram<ChatInfo>(token, agent, 'getChat', { chat_id: chatId });
       context.stdout(`✅ Чат доступен: ${formatChat(chat)}`);
       reachableChats.push(chatId);
     } catch (error) {
@@ -357,7 +384,7 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
 
     context.stdout(`Проверка отправки пробного сообщения в ${probeDescription}…`);
     try {
-      const probe = await callTelegram<SentMessage>(token, 'sendMessage', {
+      const probe = await callTelegram<SentMessage>(token, agent, 'sendMessage', {
         chat_id: chatId,
         message_thread_id: parsedThread.value,
         text:
@@ -366,7 +393,14 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
             : 'pino-telegram-cli chat probe',
         disable_notification: true,
       });
-      await attemptDeleteMessage(token, chatId, probe.message_id, context);
+      try {
+        await callTelegram<boolean>(token, agent, 'deleteMessage', {
+          chat_id: chatId,
+          message_id: probe.message_id,
+        });
+      } catch (error) {
+        context.stderr(formatTelegramError('⚠️ Не удалось удалить контрольное сообщение', error));
+      }
       context.stdout(`✅ Пробное сообщение отправлено в ${probeDescription}`);
     } catch (error) {
       hasFailures = true;
@@ -379,38 +413,17 @@ async function handleCheck(options: CliOptions, context: CliContext): Promise<nu
 }
 
 /**
- * Пытается удалить временное сообщение, созданное во время проверки.
- * Ошибки удаления подавляются, чтобы не нарушать основной сценарий проверки.
- *
- * @param token Токен Telegram-бота.
- * @param chatId Идентификатор чата.
- * @param messageId Идентификатор отправленного сообщения.
- * @param context Контекст CLI для логирования.
- */
-async function attemptDeleteMessage(
-  token: string,
-  chatId: string | number,
-  messageId: number,
-  context: CliContext,
-): Promise<void> {
-  try {
-    await callTelegram<boolean>(token, 'deleteMessage', {
-      chat_id: chatId,
-      message_id: messageId,
-    });
-  } catch (error) {
-    context.stderr(formatTelegramError('⚠️ Не удалось удалить контрольное сообщение', error));
-  }
-}
-
-/**
  * Генерирует пример конфигурации транспорта и сохраняет его на диск.
  *
  * @param options Опции командной строки.
  * @param context Контекст ввода-вывода CLI.
  * @returns Код завершения команды.
  */
-async function handleGenerateConfig(options: CliOptions, context: CliContext): Promise<number> {
+async function handleGenerateConfig(
+  options: CliOptions,
+  context: CliContext,
+  proxy?: URL,
+): Promise<number> {
   const tokenCandidate = pickOption(options, ['token', 'botToken']);
   if (typeof tokenCandidate === 'boolean') {
     context.stderr('Флаг --token требует значения.');
@@ -456,6 +469,9 @@ async function handleGenerateConfig(options: CliOptions, context: CliContext): P
     botToken: token,
     chatId: chatValue,
   };
+  const publicProxyUrl =
+    proxy && (proxy.username || proxy.password ? '<YOUR_PROXY_URL>' : proxy.href);
+  if (publicProxyUrl) config.proxyUrl = publicProxyUrl;
 
   if (parsedThread.value !== undefined) {
     config.threadId = parsedThread.value;
@@ -476,6 +492,7 @@ async function handleGenerateConfig(options: CliOptions, context: CliContext): P
       `TELEGRAM_BOT_TOKEN=${token}`,
       `TELEGRAM_CHAT_ID=${normalizedChat === CHAT_PLACEHOLDER ? '' : normalizedChat}`,
     ];
+    if (publicProxyUrl) envLines.push(`TELEGRAM_PROXY_URL=${publicProxyUrl}`);
     if (parsedThread.value !== undefined) {
       envLines.push(`TELEGRAM_THREAD_ID=${parsedThread.value}`);
     }
@@ -564,14 +581,16 @@ function parseThreadId(value?: string): { value?: number; error?: string } {
  */
 async function callTelegram<T>(
   token: string,
+  agent: TelegramProxyAgent | undefined,
   method: string,
   params?: Record<string, unknown>,
 ): Promise<T> {
   const url = buildTelegramMethodUrl(token, method, params);
   const timeout = createRequestTimeout(CLI_REQUEST_TIMEOUT_MS);
+  const proxy = agent?.getProxyUrl();
 
   try {
-    const response = await fetch(url, { signal: timeout.signal });
+    const response = await requestTelegram(url, { signal: timeout.signal }, agent);
 
     let data: TelegramResponse<T> | undefined;
     try {
@@ -587,7 +606,11 @@ async function callTelegram<T>(
 
     if (!response.ok || !data?.ok || data.result === undefined) {
       const description = data?.description ?? response.statusText ?? 'Неизвестная ошибка';
-      throw new TelegramCliError(description, response.status, data?.error_code);
+      throw new TelegramCliError(
+        redactTelegramDiagnostic(String(description), token, proxy),
+        response.status,
+        data?.error_code,
+      );
     }
 
     return data.result;
@@ -602,12 +625,15 @@ async function callTelegram<T>(
       );
     }
 
+    if (error instanceof ProxyConnectError) {
+      throw new TelegramCliError(error.message, error.status);
+    }
     const reason = (error as Error | undefined)?.message ?? 'неизвестная ошибка';
     if (error instanceof TelegramCliError) {
       throw error;
     }
     throw new TelegramCliError(
-      `Сетевая ошибка при вызове ${method}: ${reason}`,
+      `Сетевая ошибка при вызове ${method}: ${redactTelegramDiagnostic(reason, token, proxy)}`,
       undefined,
       undefined,
       error,
@@ -712,8 +738,8 @@ function printHelp(context: CliContext): void {
     'pino-telegram-cli — утилита для проверки Telegram Bot API и генерации конфигурации транспорта.',
     '',
     'Использование:',
-    '  pino-telegram-cli check --token <token> [--chat-id <id>] [--thread-id <id>] [--probe-message]',
-    '  pino-telegram-cli generate-config [--token <token>] [--chat-id <id>[,<id>]] [--format json|env] [--include-token] [--output <файл>]',
+    '  pino-telegram-cli check --token <token> [--chat-id <id>] [--thread-id <id>] [--proxy-url <url>] [--probe-message]',
+    '  pino-telegram-cli generate-config [--token <token>] [--chat-id <id>[,<id>]] [--proxy-url <url>] [--format json|env] [--include-token] [--output <файл>]',
     '',
     'Позиционные параметры:',
     '  check <token> [chatId] [threadId]              Быстрый ввод токена и идентификаторов',
@@ -721,6 +747,7 @@ function printHelp(context: CliContext): void {
     '',
     'Опции:',
     '  --token, --bot-token           Токен бота (или TELEGRAM_BOT_TOKEN)',
+    '  --proxy-url                    HTTP(S)- или SOCKS5-прокси (или TELEGRAM_PROXY_URL)',
     '  --chat-id, --chat              Идентификатор чата/чатов (через запятую) или TELEGRAM_CHAT_ID',
     '  --thread-id, --thread          Идентификатор темы (message_thread_id) или TELEGRAM_THREAD_ID',
     '  --probe-message                Отправить и удалить тестовое сообщение для проверки прав отправки',

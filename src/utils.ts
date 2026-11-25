@@ -1,4 +1,4 @@
-﻿import {
+import {
   NormalizedOptions,
   NormalizedTelegramChatTarget,
   RawChatTarget,
@@ -8,6 +8,7 @@
   TelegramTransportOptions,
 } from './types';
 import { createCompactFormatter, createMediaFormatter, createVerboseFormatter } from './presets';
+import { parseProxyUrl, ProxyConfigurationError } from './telegram-http';
 
 const TELEGRAM_BASE_URL = 'https://api.telegram.org';
 const DEFAULT_CONTEXT_KEYS = ['context', 'ctx'];
@@ -80,6 +81,10 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     throw createConfigurationError('Не найдено ни одного целевого чата', 'NO_CHAT_TARGET');
   }
 
+  const proxyUrl = parseProxyUrl(options.proxyUrl);
+  if (proxyUrl && options.send !== undefined) {
+    throw new ProxyConfigurationError('proxyUrl нельзя использовать вместе с send');
+  }
   const parseMode = options.parseMode ?? 'HTML';
   const includeContext = options.includeContext ?? true;
   const contextKeys = Array.isArray(options.contextKeys)
@@ -106,6 +111,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
 
   return {
     botToken,
+    proxyUrl,
     targets,
     parseMode,
     disableNotification: options.disableNotification ?? false,
@@ -126,6 +132,7 @@ export function normalizeOptions(options: TelegramTransportOptions): NormalizedO
     retryInitialDelay,
     retryBackoffFactor,
     retryMaxDelay,
+    proxyRetryAfterLimit: Math.max(0, options.retryMaxDelay ?? DEFAULT_RETRY_MAX_DELAY),
     requestTimeoutMs,
     formatMessage: options.formatMessage ?? resolveBuiltInFormatter(formatPreset),
     onDeliveryError: options.onDeliveryError,
@@ -765,16 +772,43 @@ interface RequestTimeoutContext {
   didTimeout: () => boolean;
 }
 
+export async function waitForDelay(ms: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  // Node заменяет задержку больше signed int32 на 1 мс. Не повторяем раньше подсказки.
+  const maxTimerDelay = 2 ** 31 - 1;
+  for (let remaining = Math.ceil(ms); remaining > 0; remaining -= maxTimerDelay) {
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      };
+      const timer = setTimeout(
+        () => {
+          signal.removeEventListener('abort', abort);
+          resolve();
+        },
+        Math.min(remaining, maxTimerDelay),
+      );
+      signal.addEventListener('abort', abort, { once: true });
+    });
+    signal.throwIfAborted();
+  }
+}
+
 /**
  * Создаёт AbortSignal с ограничением по времени для HTTP-запросов.
  *
  * @param timeoutMs Максимальное время ожидания в миллисекундах. 0 отключает таймаут.
+ * @param parentSignal Сигнал закрытия транспорта, независимый от дедлайна запроса.
  * @returns Контекст с сигналом, функцией очистки таймера и флагом срабатывания.
  */
-export function createRequestTimeout(timeoutMs: number): RequestTimeoutContext {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+export function createRequestTimeout(
+  timeoutMs: number,
+  parentSignal?: AbortSignal,
+): RequestTimeoutContext {
+  const hasDeadline = Number.isFinite(timeoutMs) && timeoutMs > 0;
+  if (!hasDeadline && !parentSignal) {
     return {
-      signal: undefined,
       dispose: () => {},
       didTimeout: () => false,
     };
@@ -782,17 +816,29 @@ export function createRequestTimeout(timeoutMs: number): RequestTimeoutContext {
 
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timer = hasDeadline
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : undefined;
 
-  timer.unref?.();
+  timer?.unref();
+
+  // Ранний fetch не очищает слушатели на переданном сигнале. Даже без таймера
+  // даём ему сигнал отдельной попытки и в dispose отвязываем его от родителя.
+  const abort = () => {
+    clearTimeout(timer);
+    controller.abort(parentSignal?.reason);
+  };
+  if (parentSignal?.aborted) abort();
+  else parentSignal?.addEventListener('abort', abort, { once: true });
 
   return {
     signal: controller.signal,
     dispose: () => {
       clearTimeout(timer);
+      parentSignal?.removeEventListener('abort', abort);
     },
     didTimeout: () => timedOut,
   };

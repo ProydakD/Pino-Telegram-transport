@@ -1,5 +1,7 @@
+import dns from 'node:dns';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TelegramClient, TelegramDeliveryError } from '../src/telegram-client';
+import { TelegramProxyAgent } from '../src/telegram-proxy-agent';
 import { normalizeOptions } from '../src/utils';
 import type {
   TelegramDocumentPayload,
@@ -54,6 +56,48 @@ function createTimeoutResponse(init?: Parameters<typeof fetch>[1]): Promise<Resp
 }
 
 describe('TelegramClient', () => {
+  it.each([
+    ['UNSPECIFIED', 'EE certificate key too weak', 1, 'CERT_KEY_TOO_WEAK'],
+    ['UNSPECIFIED', 'another TLS failure', 3, 'UNSPECIFIED'],
+    ['ECONNRESET', 'connection reset', 3, 'ECONNRESET'],
+  ])(
+    'classifies proxy error %s: %s without leaking its text',
+    async (code, message, attempts, expectedCode) => {
+      const request = vi
+        .spyOn(TelegramProxyAgent.prototype, 'createRequest')
+        .mockImplementation(() => {
+          throw Object.assign(new Error(message), { code });
+        });
+      const client = createClient({
+        proxyUrl: 'https://127.0.0.1:1080',
+        retryAttempts: 3,
+        retryInitialDelay: 0,
+      });
+      try {
+        await expect(
+          client.send({ method: 'sendMessage', payload: { chat_id: 111, text: 'tls' } }),
+        ).rejects.toMatchObject({ cause: { code: expectedCode } });
+        expect(request).toHaveBeenCalledTimes(attempts);
+      } finally {
+        client.close();
+        request.mockRestore();
+      }
+    },
+  );
+
+  it('times out even while SOCKS5 is waiting for local DNS', async () => {
+    const lookup = vi.spyOn(dns, 'lookup').mockImplementation(() => {});
+    try {
+      const client = createClient({ proxyUrl: 'socks5://127.0.0.1:1080', requestTimeoutMs: 40 });
+      await expect(
+        client.send({ method: 'sendMessage', payload: { chat_id: 111, text: 'dns' } }),
+      ).rejects.toMatchObject({ isTimeout: true });
+      expect(lookup).toHaveBeenCalled();
+    } finally {
+      lookup.mockRestore();
+    }
+  }, 1000);
+
   afterEach(() => {
     vi.useRealTimers();
     globalThis.fetch = originalFetch;
@@ -292,5 +336,22 @@ describe('TelegramClient', () => {
     expect(error).toMatchObject({
       isTimeout: true,
     });
+  });
+
+  it('clears an already scheduled retry when the client closes', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new Error('connection reset'));
+    globalThis.fetch = fetchMock;
+    const client = createClient({ retryAttempts: 3, retryInitialDelay: 500 });
+    const outcome = client
+      .send({ method: 'sendMessage', payload: { chat_id: 111, text: 'cancel retry' } })
+      .catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
+    client.close();
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(outcome).resolves.toMatchObject({ message: 'Транспорт Telegram закрыт' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

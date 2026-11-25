@@ -35,7 +35,8 @@ Recent releases focused on three areas: safer delivery, safer formatting, and lo
 - Built-in `formatPreset: 'compact' | 'verbose'` makes it easier to switch between dense operational logs and more detailed output.
 - `dedupWindowMs` suppresses repeated text events inside a configurable time window.
 - `pino-telegram-cli check --probe-message` verifies real send permissions, not just chat visibility.
-- `pino-telegram-cli generate-config --include-token` keeps generated configs safe by default.
+- Route text, photos, and documents through an HTTP(S) or SOCKS5 proxy with `proxyUrl`. The CLI accepts the same route via `--proxy-url` or `TELEGRAM_PROXY_URL`.
+- `generate-config` hides the bot token unless you pass `--include-token`. Proxy credentials are never included.
 - CI and prerelease checks now cover Node.js `18/20/24` and `pino@9/10`.
 
 ### Example: production-friendly transport config
@@ -48,6 +49,7 @@ const logger = pino({
     target: 'pino-telegram-logger-transport',
     options: {
       botToken: process.env.TELEGRAM_BOT_TOKEN!,
+      proxyUrl: process.env.TELEGRAM_PROXY_URL,
       chatId: [
         { chatId: process.env.TELEGRAM_ALERTS_CHAT_ID!, minLevel: 'error' },
         { chatId: process.env.TELEGRAM_WARNINGS_CHAT_ID!, minLevel: 'warn' },
@@ -133,8 +135,8 @@ When the log contains `err`, an **Error** section with `message` and `stack` is 
 
 - Retry delivery on 429 and 5xx responses.
 - Tune delays with `retryAttempts`, `retryInitialDelay`, `retryBackoffFactor`, `retryMaxDelay`.
-- Abort slow Telegram requests with `requestTimeoutMs` (`10000` ms by default) and retry timeout failures.
-- Respect `retry_after` hints returned by Telegram.
+- Bound each attempt with `requestTimeoutMs` (`10000` ms by default). A timeout before the HTTP status can be retried; a broken response body after `2xx` does not repeat the POST.
+- Telegram's `parameters.retry_after` sets a minimum wait. The HTTP(S) proxy's `Retry-After` follows [separate rules](docs/configuration.en.md#client-behaviour): a hint above `retryMaxDelay` prevents a retry.
 - Set `retryAttempts: 1` to disable retries entirely.
 
 ## Working with Media

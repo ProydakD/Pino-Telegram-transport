@@ -1,4 +1,8 @@
-import { buildTelegramUrl, createRequestTimeout } from './utils';
+import { buildTelegramUrl, createRequestTimeout, waitForDelay } from './utils';
+import { ProxyConnectError } from './http-connect';
+import { ProxyRequestError, redactTelegramDiagnostic, requestTelegram } from './telegram-http';
+import { TelegramProxyAgent } from './telegram-proxy-agent';
+import { SocksAuthenticationError, SocksConnectError } from './socks5';
 import {
   NormalizedOptions,
   TelegramInputFile,
@@ -6,7 +10,27 @@ import {
   TelegramSendPayload,
 } from './types';
 
-type FetchBody = Exclude<RequestInit['body'], null | undefined>;
+// Ошибки проверки имени или цепочки сертификата, а не обрывы TLS-соединения.
+const TLS_VERIFICATION_CODES = new Set([
+  'CERT_HAS_EXPIRED',
+  'CERT_KEY_TOO_WEAK',
+  'CERT_SIGNATURE_ALGORITHM_TOO_WEAK',
+  'CERT_NOT_YET_VALID',
+  'CERT_REJECTED',
+  'CERT_REVOKED',
+  'CERT_SIGNATURE_FAILURE',
+  'CERT_UNTRUSTED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'HOSTNAME_MISMATCH',
+  'INVALID_CA',
+  'INVALID_PURPOSE',
+  'PATH_LENGTH_EXCEEDED',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+]);
 
 interface SerializedBuffer {
   type: 'Buffer';
@@ -47,7 +71,20 @@ export class TelegramDeliveryError extends Error {
  * Отвечает за подготовку multipart-запросов, повторные попытки и нормализацию бинарных полей.
  */
 export class TelegramClient {
-  constructor(private readonly options: NormalizedOptions) {}
+  private readonly proxyAgent?: TelegramProxyAgent;
+  // TS-private не требует ES2015 target от потребителя публичных деклараций.
+  private readonly lifetime = new AbortController();
+  readonly signal = this.lifetime.signal;
+
+  constructor(private readonly options: NormalizedOptions) {
+    if (options.proxyUrl)
+      this.proxyAgent = new TelegramProxyAgent(options.proxyUrl, options.requestTimeoutMs);
+  }
+
+  close(): void {
+    this.lifetime.abort(new Error('Транспорт Telegram закрыт'));
+    this.proxyAgent?.destroy();
+  }
 
   /**
    * Отправляет запрос в Telegram, выполняя повторные попытки при временных ошибках.
@@ -55,30 +92,49 @@ export class TelegramClient {
    * @param request Готовый Telegram-запрос, сформированный транспортом.
    */
   async send(request: TelegramRequest): Promise<void> {
-    await this.executeWithRetry(async () => {
+    await this.executeWithRetry(async (afterProxyAddress) => {
       if (this.options.send) {
         await this.options.send(request.payload, request.method);
         return;
       }
 
       const url = buildTelegramUrl(this.options.botToken, request.method);
-      const timeout = createRequestTimeout(this.options.requestTimeoutMs);
+      const timeout = createRequestTimeout(this.options.requestTimeoutMs, this.signal);
 
       try {
         const { body, headers } = this.prepareRequestBody(request);
-        const response = await fetch(url, {
-          method: 'POST',
-          headers,
-          body,
-          signal: timeout.signal,
-        });
+        const response = await requestTelegram(
+          url,
+          {
+            method: 'POST',
+            headers,
+            body,
+            signal: timeout.signal,
+            afterProxyAddress,
+          },
+          this.proxyAgent,
+        );
 
-        const data = (await response.json().catch(() => ({}))) as TelegramErrorResponse;
+        const data = (await response.json().catch(() => {
+          // Фрагмент тела может быть чувствительным; для журнала и решения о повторе нужен только статус.
+          throw new TelegramDeliveryError(
+            `Не удалось прочитать ответ Telegram (${request.method}, HTTP ${response.status})`,
+            undefined,
+            response.status,
+          );
+        })) as TelegramErrorResponse;
 
-        if (!response.ok || !data.ok) {
+        if (!response.ok || !data?.ok) {
           const description = data?.description ?? response.statusText ?? 'Unknown error';
           throw new TelegramDeliveryError(
-            'Ошибка Telegram API (' + request.method + '): ' + description,
+            'Ошибка Telegram API (' +
+              request.method +
+              '): ' +
+              redactTelegramDiagnostic(
+                String(description),
+                this.options.botToken,
+                this.options.proxyUrl,
+              ),
             data,
             response.status,
           );
@@ -88,7 +144,9 @@ export class TelegramClient {
           throw new TelegramDeliveryError(
             `Таймаут запроса к Telegram (${request.method}) после ${this.options.requestTimeoutMs} мс`,
             undefined,
-            undefined,
+            error instanceof TelegramDeliveryError || error instanceof ProxyConnectError
+              ? error.status
+              : undefined,
             error,
             true,
           );
@@ -96,10 +154,16 @@ export class TelegramClient {
         if (error instanceof TelegramDeliveryError) {
           throw error;
         }
+        if (error instanceof ProxyConnectError) {
+          throw new TelegramDeliveryError(error.message, undefined, error.status, error);
+        }
 
         const reason = (error as Error)?.message ?? 'неизвестная ошибка';
         throw new TelegramDeliveryError(
-          'Ошибка сети Telegram (' + request.method + '): ' + reason,
+          'Ошибка сети Telegram (' +
+            request.method +
+            '): ' +
+            redactTelegramDiagnostic(reason, this.options.botToken, this.options.proxyUrl),
           undefined,
           undefined,
           error,
@@ -117,7 +181,7 @@ export class TelegramClient {
    * @returns Тело запроса и дополнительные заголовки.
    */
   private prepareRequestBody(request: TelegramRequest): {
-    body: FetchBody;
+    body: string | FormData;
     headers?: Record<string, string>;
   } {
     if (this.containsBinary(request.payload)) {
@@ -360,23 +424,41 @@ export class TelegramClient {
    *
    * @param operation Асинхронная операция отправки запроса.
    */
-  private async executeWithRetry(operation: () => Promise<void>): Promise<void> {
+  private async executeWithRetry(
+    operation: (afterProxyAddress?: string) => Promise<void>,
+  ): Promise<void> {
     const { retryAttempts, retryInitialDelay, retryBackoffFactor, retryMaxDelay } = this.options;
     let attempt = 0;
     let delay = retryInitialDelay;
+    let afterProxyAddress: string | undefined;
 
     while (attempt < retryAttempts) {
+      this.signal.throwIfAborted();
       try {
-        await operation();
+        await operation(afterProxyAddress);
         return;
       } catch (error) {
+        this.signal.throwIfAborted();
         attempt += 1;
         if (!this.isRetryable(error) || attempt >= retryAttempts) {
           throw error;
         }
 
-        const waitTime = this.resolveRetryDelay(error, delay);
-        await sleep(waitTime);
+        const cause = error instanceof TelegramDeliveryError ? error.cause : undefined;
+        const proxyFailure = cause instanceof ProxyConnectError ? cause : undefined;
+        if (
+          proxyFailure?.retryAfterMs !== undefined &&
+          proxyFailure.retryAfterMs > this.options.proxyRetryAfterLimit
+        ) {
+          // Этот отказ не откладывает очередь и не сдвигает IP для следующей записи.
+          throw error;
+        }
+        const waitTime = Math.max(
+          delay,
+          proxyFailure?.retryAfterMs ?? this.extractRetryAfter(error) ?? 0,
+        );
+        await waitForDelay(waitTime, this.signal);
+        if (proxyFailure) afterProxyAddress = proxyFailure.address;
         const multiplied = delay * retryBackoffFactor;
         const nextBase = Math.max(multiplied, waitTime, retryInitialDelay);
         delay = Math.min(nextBase, retryMaxDelay);
@@ -392,9 +474,19 @@ export class TelegramClient {
    */
   private isRetryable(error: unknown): boolean {
     if (error instanceof TelegramDeliveryError) {
-      if (error.isTimeout) {
-        return true;
+      const { cause } = error;
+      // REP 2/7 окончательны; при удалённом DNS REP 8 нельзя обойти локальным lookup.
+      if (
+        cause instanceof SocksAuthenticationError ||
+        (cause instanceof SocksConnectError &&
+          (cause.reply === 2 ||
+            cause.reply === 7 ||
+            (cause.reply === 8 && this.options.proxyUrl?.protocol === 'socks5h:'))) ||
+        (cause instanceof ProxyRequestError && cause.code && TLS_VERIFICATION_CODES.has(cause.code))
+      ) {
+        return false;
       }
+      // После заголовков решение зависит от статуса, даже если чтение тела истекло по таймауту.
       const code = this.resolveStatusCode(error);
       if (code === 429) {
         return true;
@@ -406,23 +498,6 @@ export class TelegramClient {
       return true;
     }
     return false;
-  }
-
-  /**
-   * Рассчитывает задержку перед следующей попыткой с учётом retry_after.
-   *
-   * @param error Ошибка, полученная при отправке.
-   * @param fallback Базовая задержка.
-   * @returns Время ожидания в миллисекундах.
-   */
-  private resolveRetryDelay(error: unknown, fallback: number): number {
-    if (error instanceof TelegramDeliveryError) {
-      const retryAfter = this.extractRetryAfter(error);
-      if (retryAfter !== undefined) {
-        return Math.max(fallback, retryAfter);
-      }
-    }
-    return Math.max(0, fallback);
   }
 
   /**
@@ -445,7 +520,8 @@ export class TelegramClient {
    * @param error Ошибка доставки.
    * @returns Задержка в миллисекундах или undefined.
    */
-  private extractRetryAfter(error: TelegramDeliveryError): number | undefined {
+  private extractRetryAfter(error: unknown): number | undefined {
+    if (!(error instanceof TelegramDeliveryError)) return undefined;
     const parameters = error.response?.parameters as { retry_after?: number | string } | undefined;
     const candidate = parameters?.retry_after;
     if (candidate === undefined) {
@@ -457,16 +533,4 @@ export class TelegramClient {
     }
     return Math.round(numeric * 1000);
   }
-}
-
-/**
- * Асинхронная задержка, используемая при повторных попытках.
- *
- * @param ms Длительность ожидания в миллисекундах.
- */
-function sleep(ms: number): Promise<void> {
-  if (ms <= 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

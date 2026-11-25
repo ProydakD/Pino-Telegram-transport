@@ -39,6 +39,48 @@ jobs:
       - name: Build package
         run: npm run build
 
+      - name: Test proxy routes against the built package
+        run: npm run test:proxy
+
+      - name: Test public types with ES5 target
+        run: npm run test:types
+
+      - name: Set up early Node 18 for proxy regressions
+        if: matrix.node == '24'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.12.1'
+
+      - name: Test proxy DNS, debug logging and uploads on Node 18.12.1
+        if: matrix.node == '24'
+        run: node tests/proxy/legacy-runtime.cjs
+
+      - name: Set up minimum supported Node
+        if: matrix.node == '24'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.0.0'
+
+      - name: Test CONNECT errors on Node 18.0.0
+        if: matrix.node == '24'
+        run: node tests/proxy/legacy-connect.cjs
+
+      - name: Set up Node with the fetch signal regression
+        if: matrix.node == '24'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.16.0'
+
+      - name: Test direct heap, cancellation and uploads on Node 18.16.0
+        if: matrix.node == '24'
+        env:
+          NODE_EXTRA_CA_CERTS: tests/proxy/localhost-cert.pem
+          TELEGRAM_BOT_TOKEN: '0:fixture'
+        run: |
+          node --expose-gc tests/proxy/legacy-heap.cjs
+          node tests/proxy/legacy-transport.cjs no-timeout
+          node tests/proxy/legacy-multipart.cjs --direct
+
   compat:
     name: Compat / Node ${{ matrix.node }} / pino@${{ matrix.pino }}
     runs-on: ubuntu-latest
