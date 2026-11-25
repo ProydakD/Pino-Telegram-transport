@@ -3,10 +3,16 @@ import { json as readJson } from 'node:stream/consumers';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { domainToASCII } from 'node:url';
-import { SocksAuthenticationError } from './socks5';
+import { SocksAuthenticationError, SocksConnectError } from './socks5';
 import type { TelegramProxyAgent } from './telegram-proxy-agent';
 
 export class ProxyConfigurationError extends Error {}
+
+export class ProxyRequestError extends Error {
+  constructor(readonly code?: string) {
+    super(`Не удалось выполнить запрос через прокси${code ? ` (${code})` : ''}`);
+  }
+}
 
 export function redactTelegramDiagnostic(message: string, token: string, proxy?: URL): string {
   const password = proxy?.password;
@@ -108,10 +114,13 @@ export async function requestTelegram(
       }
     });
   } catch (error) {
-    if (error instanceof SocksAuthenticationError) throw error;
+    if (error instanceof SocksAuthenticationError || error instanceof SocksConnectError)
+      throw error;
     // Ошибки агента могут содержать разобранный запрос или ответ прокси, включая секреты.
-    const code = (error as NodeJS.ErrnoException)?.code;
-    const reason = typeof code === 'string' && /^[A-Z_0-9]+$/.test(code) ? ` (${code})` : '';
-    throw new Error(`Не удалось выполнить запрос через прокси${reason}`);
+    // Сохраняем для политики повторов только безопасный код Node, без исходной ошибки.
+    const code = error instanceof Error && 'code' in error ? error.code : undefined;
+    throw new ProxyRequestError(
+      typeof code === 'string' && /^[A-Z_0-9]+$/.test(code) ? code : undefined,
+    );
   }
 }

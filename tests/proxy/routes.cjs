@@ -134,7 +134,7 @@ test('temporary API failures retry through the same proxy', async (t) => {
   assert.deepEqual(proxy.targets, [`localhost:${api.port}`]);
 });
 
-test('SOCKS5: one transport reuses the tunnel for five messages', async (t) => {
+test('SOCKS5: end drains five messages through the same tunnel', async (t) => {
   const api = await startApi(t);
   const proxy = await startSocks(t, api.port, 'socks5h');
   const result = await run(api, proxy.url, [sender, 'direct'], { env: { FIXTURE_MESSAGES: '5' } });
@@ -222,6 +222,39 @@ test('SOCKS5: an explicit authentication refusal is safe and is not retried', as
   checkExit(send, 1);
   assert.match(send.output, /отклонил авторизацию/);
   assert.equal(proxy.authAttempts, 2);
+  assert.equal(proxy.targets.length, 0);
+  assert.equal(api.requests.length, 0);
+});
+
+for (const reply of [2, 7]) {
+  test(`SOCKS5: CONNECT reply ${reply} is retained and not retried`, async (t) => {
+    const api = await startApi(t);
+    const proxy = await startSocks(t, api.port, 'socks5h', { connectReply: () => reply });
+    const client = new TelegramClient(
+      normalizeOptions({ botToken: token, chatId: 42, proxyUrl: proxy.url }),
+    );
+    t.after(() => client.close());
+    const failure = await client
+      .send({ method: 'sendMessage', payload: { chat_id: 42, text: 'refused' } })
+      .catch((error) => error);
+    assert.deepEqual({ attempts: proxy.targets.length, reply: failure?.cause?.reply }, {
+      attempts: 1,
+      reply,
+    });
+    assert.match(failure.message, new RegExp(`код ${reply}`));
+    assert.equal(api.requests.length, 0);
+  });
+}
+
+test('HTTPS CONNECT: an untrusted proxy certificate is not retried', async (t) => {
+  const api = await startApi(t);
+  const proxy = await startConnect(t, api.port, 'https', false);
+  const result = await run(api, proxy.url, [sender, 'direct'], {
+    env: { FIXTURE_ATTEMPTS: '3', NODE_EXTRA_CA_CERTS: '' },
+  });
+  checkExit(result, 1);
+  assert.equal(proxy.connections, 1);
+  assert.match(result.output, /DEPTH_ZERO_SELF_SIGNED_CERT/);
   assert.equal(proxy.targets.length, 0);
   assert.equal(api.requests.length, 0);
 });
@@ -386,26 +419,36 @@ test(
 );
 
 test(
-  'closing the transport closes a pending SOCKS5 handshake without a request deadline',
-  { timeout: 5000 },
+  'destroy releases the pending SOCKS5 handshake and skips queued logs with default retries',
+  { timeout: 2000 },
   async (t) => {
     const server = net.createServer((socket) => socket.resume());
     const port = await listen(t, server);
+    const formatted = [];
+    const failures = [];
     const transport = telegramTransport({
       botToken: token,
       chatId: 42,
       proxyUrl: `socks5h://127.0.0.1:${port}`,
       requestTimeoutMs: 0,
-      retryAttempts: 1,
-      onDeliveryError: () => undefined,
+      formatMessage: ({ log }) => {
+        formatted.push(log.msg);
+        return { text: log.msg };
+      },
+      onDeliveryError: (error) => failures.push(error.message),
     });
     t.after(() => transport.destroy());
     const connection = once(server, 'connection');
-    transport.write('{"level":30,"msg":"pending"}\n');
+    transport.write('{"level":30,"msg":"active"}\n{"level":30,"msg":"queued"}\n');
     const [socket] = await connection;
     const closed = once(socket, 'close');
     transport.destroy();
     await closed;
+    await new Promise((resolve, reject) => {
+      transport.flush((error) => (error ? reject(error) : resolve()));
+    });
+    assert.deepEqual(formatted, ['active']);
+    assert.deepEqual(failures, []);
   },
 );
 

@@ -307,4 +307,21 @@ describe('TelegramClient', () => {
       isTimeout: true,
     });
   });
+
+  it('clears an already scheduled retry when the client closes', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new Error('connection reset'));
+    globalThis.fetch = fetchMock;
+    const client = createClient({ retryAttempts: 3, retryInitialDelay: 500 });
+    const outcome = client
+      .send({ method: 'sendMessage', payload: { chat_id: 111, text: 'cancel retry' } })
+      .catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
+    client.close();
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(outcome).resolves.toMatchObject({ message: 'Транспорт Telegram закрыт' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

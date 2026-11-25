@@ -93,6 +93,7 @@ export default function telegramTransport(options: TelegramTransportOptions) {
   const stream = new Writable({
     highWaterMark: TRANSPORT_HIGH_WATER_MARK,
     destroy(error, callback) {
+      // При end() очередь уже обработана в final; при destroy() отменяем ожидания и запрос.
       client.close();
       callback(error);
     },
@@ -217,11 +218,13 @@ export default function telegramTransport(options: TelegramTransportOptions) {
    */
   async function processLog(log: PinoLog): Promise<void> {
     for (const target of normalized.targets) {
+      if (client.signal.aborted) return;
       if (!shouldSendToTarget(log, target)) {
         continue;
       }
 
       const message = await buildMessage({ log, target, options: normalized }, normalized);
+      if (client.signal.aborted) return;
       let requests: TelegramRequest[];
 
       try {
@@ -238,11 +241,15 @@ export default function telegramTransport(options: TelegramTransportOptions) {
 
       let deliveredAllRequests = true;
       for (const request of requests) {
-        await rateLimiter.wait(getTargetKey(target.chatId), normalized.minDelayBetweenMessages);
-
         try {
+          await rateLimiter.wait(
+            getTargetKey(target.chatId),
+            normalized.minDelayBetweenMessages,
+            client.signal,
+          );
           await client.send(request);
         } catch (error) {
+          if (client.signal.aborted) return;
           handleError(error, request);
           deliveredAllRequests = false;
           break;

@@ -1,13 +1,33 @@
-import { buildTelegramUrl, createRequestTimeout } from './utils';
-import { redactTelegramDiagnostic, requestTelegram } from './telegram-http';
+import { buildTelegramUrl, createRequestTimeout, waitForDelay } from './utils';
+import { ProxyRequestError, redactTelegramDiagnostic, requestTelegram } from './telegram-http';
 import { TelegramProxyAgent } from './telegram-proxy-agent';
-import { SocksAuthenticationError } from './socks5';
+import { SocksAuthenticationError, SocksConnectError } from './socks5';
 import {
   NormalizedOptions,
   TelegramInputFile,
   TelegramRequest,
   TelegramSendPayload,
 } from './types';
+
+// Ошибки проверки имени или цепочки сертификата, а не обрывы TLS-соединения.
+const TLS_VERIFICATION_CODES = new Set([
+  'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'CERT_REJECTED',
+  'CERT_REVOKED',
+  'CERT_SIGNATURE_FAILURE',
+  'CERT_UNTRUSTED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'HOSTNAME_MISMATCH',
+  'INVALID_CA',
+  'INVALID_PURPOSE',
+  'PATH_LENGTH_EXCEEDED',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+]);
 
 interface SerializedBuffer {
   type: 'Buffer';
@@ -49,12 +69,15 @@ export class TelegramDeliveryError extends Error {
  */
 export class TelegramClient {
   private readonly proxyAgent?: TelegramProxyAgent;
+  readonly #lifetime = new AbortController();
+  readonly signal = this.#lifetime.signal;
 
   constructor(private readonly options: NormalizedOptions) {
     if (options.proxyUrl) this.proxyAgent = new TelegramProxyAgent(options.proxyUrl);
   }
 
   close(): void {
+    this.#lifetime.abort(new Error('Транспорт Telegram закрыт'));
     this.proxyAgent?.destroy();
   }
 
@@ -71,7 +94,7 @@ export class TelegramClient {
       }
 
       const url = buildTelegramUrl(this.options.botToken, request.method);
-      const timeout = createRequestTimeout(this.options.requestTimeoutMs);
+      const timeout = createRequestTimeout(this.options.requestTimeoutMs, this.signal);
 
       try {
         const { body, headers } = this.prepareRequestBody(request);
@@ -396,17 +419,19 @@ export class TelegramClient {
     let delay = retryInitialDelay;
 
     while (attempt < retryAttempts) {
+      this.signal.throwIfAborted();
       try {
         await operation();
         return;
       } catch (error) {
+        this.signal.throwIfAborted();
         attempt += 1;
         if (!this.isRetryable(error) || attempt >= retryAttempts) {
           throw error;
         }
 
         const waitTime = this.resolveRetryDelay(error, delay);
-        await sleep(waitTime);
+        await waitForDelay(waitTime, this.signal);
         const multiplied = delay * retryBackoffFactor;
         const nextBase = Math.max(multiplied, waitTime, retryInitialDelay);
         delay = Math.min(nextBase, retryMaxDelay);
@@ -422,7 +447,15 @@ export class TelegramClient {
    */
   private isRetryable(error: unknown): boolean {
     if (error instanceof TelegramDeliveryError) {
-      if (error.cause instanceof SocksAuthenticationError) return false;
+      const { cause } = error;
+      // REP 2/7: правила прокси запрещают маршрут или прокси не поддерживает CONNECT.
+      if (
+        cause instanceof SocksAuthenticationError ||
+        (cause instanceof SocksConnectError && (cause.reply === 2 || cause.reply === 7)) ||
+        (cause instanceof ProxyRequestError && cause.code && TLS_VERIFICATION_CODES.has(cause.code))
+      ) {
+        return false;
+      }
       // После заголовков решение зависит от статуса, даже если чтение тела истекло по таймауту.
       const code = this.resolveStatusCode(error);
       if (code === 429) {
@@ -486,16 +519,4 @@ export class TelegramClient {
     }
     return Math.round(numeric * 1000);
   }
-}
-
-/**
- * Асинхронная задержка, используемая при повторных попытках.
- *
- * @param ms Длительность ожидания в миллисекундах.
- */
-function sleep(ms: number): Promise<void> {
-  if (ms <= 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

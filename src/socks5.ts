@@ -9,7 +9,7 @@ export class SocksAuthenticationError extends Error {
   }
 }
 
-class SocksConnectError extends Error {
+export class SocksConnectError extends Error {
   constructor(readonly reply: number) {
     super(`Прокси SOCKS5 отклонил CONNECT (код ${reply})`);
   }

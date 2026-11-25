@@ -1494,6 +1494,23 @@ describe('pino-telegram transport', () => {
     expect(attempts[2] - attempts[1]).toBeGreaterThanOrEqual(1000);
   });
 
+  it('clears the rate-limit wait when a direct stream is destroyed', async () => {
+    vi.useFakeTimers();
+    const { stream, recorder } = createTransport({ minDelayBetweenMessages: 5000 });
+    const written = new Promise<void>((resolve) => {
+      stream.write('{"level":30,"msg":"first"}\n{"level":30,"msg":"second"}\n', () => resolve());
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(recorder.requests).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    stream.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+    await written;
+    expect(recorder.requests).toHaveLength(1);
+  });
+
   it('прерывает запрос по requestTimeoutMs и передаёт timeout в onDeliveryError', async () => {
     vi.useFakeTimers();
 

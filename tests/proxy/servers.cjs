@@ -65,7 +65,9 @@ function tunnel(socket, apiPort, ready) {
 async function startConnect(t, apiPort, protocol, auth = true) {
   const targets = [];
   const serverNames = [];
+  let connections = 0;
   const server = protocol === 'https' ? https.createServer(tls) : http.createServer();
+  server.on('connection', () => connections++);
   server.on('secureConnection', (socket) => serverNames.push(socket.servername));
   server.on('connect', (req, socket) => {
     targets.push(req.url);
@@ -79,6 +81,9 @@ async function startConnect(t, apiPort, protocol, auth = true) {
   return {
     targets,
     serverNames,
+    get connections() {
+      return connections;
+    },
     url: `${protocol}://${auth ? 'user:' + encodeURIComponent(password) + '@' : ''}127.0.0.1:${port}`,
   };
 }

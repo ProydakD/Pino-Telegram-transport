@@ -1,4 +1,5 @@
 import { TelegramQueueOverflowStrategy } from './types';
+import { waitForDelay } from './utils';
 
 /**
  * Простой ограничитель частоты, который контролирует минимальный интервал между вызовами по ключу.
@@ -15,13 +16,14 @@ export class RateLimiter {
    *
    * @param key Идентификатор последовательности (обычно chatId).
    * @param minDelay Минимальный интервал между вызовами в миллисекундах.
+   * @param signal Сигнал закрытия транспорта.
    */
-  async wait(key: string, minDelay: number): Promise<void> {
+  async wait(key: string, minDelay: number, signal: AbortSignal): Promise<void> {
     const current = this.now();
     const last = this.lastExecution.get(key) ?? 0;
     const elapsed = current - last;
     if (elapsed < minDelay) {
-      await new Promise((resolve) => setTimeout(resolve, minDelay - elapsed));
+      await waitForDelay(minDelay - elapsed, signal);
     }
     this.lastExecution.set(key, this.now());
   }

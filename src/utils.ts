@@ -771,16 +771,37 @@ interface RequestTimeoutContext {
   didTimeout: () => boolean;
 }
 
+export async function waitForDelay(ms: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  if (ms <= 0) return;
+
+  await new Promise<void>((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', abort, { once: true });
+  });
+}
+
 /**
  * Создаёт AbortSignal с ограничением по времени для HTTP-запросов.
  *
  * @param timeoutMs Максимальное время ожидания в миллисекундах. 0 отключает таймаут.
+ * @param parentSignal Сигнал закрытия транспорта, независимый от дедлайна запроса.
  * @returns Контекст с сигналом, функцией очистки таймера и флагом срабатывания.
  */
-export function createRequestTimeout(timeoutMs: number): RequestTimeoutContext {
+export function createRequestTimeout(
+  timeoutMs: number,
+  parentSignal?: AbortSignal,
+): RequestTimeoutContext {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return {
-      signal: undefined,
+      signal: parentSignal,
       dispose: () => {},
       didTimeout: () => false,
     };
@@ -795,10 +816,19 @@ export function createRequestTimeout(timeoutMs: number): RequestTimeoutContext {
 
   timer.unref?.();
 
+  // Отмена по destroy() не является таймаутом. Подписка работает и на Node 18.12.
+  const abort = () => {
+    clearTimeout(timer);
+    controller.abort(parentSignal?.reason);
+  };
+  if (parentSignal?.aborted) abort();
+  else parentSignal?.addEventListener('abort', abort, { once: true });
+
   return {
     signal: controller.signal,
     dispose: () => {
       clearTimeout(timer);
+      parentSignal?.removeEventListener('abort', abort);
     },
     didTimeout: () => timedOut,
   };

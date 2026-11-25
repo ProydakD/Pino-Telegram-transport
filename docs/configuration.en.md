@@ -74,9 +74,10 @@ Override these keys with `createMediaFormatter({ typeKey, urlKey, bufferKey, ...
 - Each attempt shares one `requestTimeoutMs` deadline (`10000` ms by default) across DNS, connection establishment (including proxy address fallback), sending, and reading the response. Set `0` to disable the client's deadline, including during the SOCKS handshake.
 - The in-memory delivery queue is capped by `maxQueueSize` (`1000` tasks by default).
 - Queue overflow follows `overflowStrategy`: `dropOldest`, `dropNewest`, or `block`.
+- For a direct transport stream, `end()` drains the queue. `destroy()` instead cancels built-in requests and retry or rate-limit waits, and discards queued logs without reporting a delivery error for the cancellation. It cannot interrupt user code that is already running.
 - Deduplication applies only to `sendMessage`; an entry is added to the dedup cache only after all message parts are delivered successfully.
 - Configuration errors disable the transport and print a warning by default; `failOnInitError: true` switches this behaviour to throwing.
-- The client retries `429`, `5xx`, and temporary network errors (including timeouts before HTTP headers). It does not retry a SOCKS authentication refusal. If reading the body fails after `2xx`, the client does not resend the POST: the server may already have processed it.
+- The client retries `429`, `5xx`, and temporary network errors (including timeouts before HTTP headers). SOCKS authentication failures, SOCKS CONNECT replies `2` and `7`, and known certificate verification errors on the proxied route are not retried. If reading the body fails after `2xx`, the client does not resend the POST: the server may already have processed it.
 - Telegram `retry_after` hints are honoured as the minimum delay before the next attempt.
 - A custom `send` function receives `(payload, method)` and may implement any delivery strategy.
 
