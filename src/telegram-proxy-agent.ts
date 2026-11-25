@@ -3,13 +3,17 @@ import { request, type RequestOptions } from 'node:https';
 import { isIP } from 'node:net';
 import { connect as connectTls } from 'node:tls';
 import { Agent, type AgentConnectOpts } from 'agent-base';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import { connectToProxy } from './proxy-dns';
+import { openHttpTunnel } from './http-connect';
 import { connectSocks5 } from './socks5';
+
+interface ProxyAttempt {
+  signal?: AbortSignal;
+  afterAddress?: string;
+}
 
 export class TelegramProxyAgent extends Agent {
   readonly #proxy: URL;
-  readonly #requestSignals = new WeakMap<ClientRequest, AbortSignal>();
+  readonly #attempts = new WeakMap<ClientRequest, ProxyAttempt>();
   readonly #pending = new Set<AbortController>();
   #closed = false;
 
@@ -25,7 +29,7 @@ export class TelegramProxyAgent extends Agent {
     return this.#proxy;
   }
 
-  createRequest(url: string, options: RequestOptions): ClientRequest {
+  createRequest(url: string, options: RequestOptions, afterAddress?: string): ClientRequest {
     if (this.#closed) throw new Error('Прокси-агент закрыт');
     const { signal } = options;
     signal?.throwIfAborted();
@@ -42,13 +46,13 @@ export class TelegramProxyAgent extends Agent {
     });
     // Node привязывает signal к ClientRequest, но не передаёт его агенту.
     // agent-base вызывает connect асинхронно, после регистрации сигнала.
-    if (signal) this.#requestSignals.set(req, signal);
+    this.#attempts.set(req, { signal, afterAddress });
     return req;
   }
 
   async connect(req: ClientRequest, options: AgentConnectOpts) {
     if (this.#closed) throw new Error('Прокси-агент закрыт');
-    const signal = this.#requestSignals.get(req);
+    const { signal, afterAddress } = this.#attempts.get(req) ?? {};
     signal?.throwIfAborted();
 
     const handshake = new AbortController();
@@ -56,7 +60,7 @@ export class TelegramProxyAgent extends Agent {
     signal?.addEventListener('abort', abort, { once: true });
     this.#pending.add(handshake);
     try {
-      const socket = await this.#openTunnel(req, options, handshake.signal);
+      const socket = await this.#openTunnel(options, handshake.signal, afterAddress);
       if (handshake.signal.aborted) {
         socket.destroy();
         handshake.signal.throwIfAborted();
@@ -77,42 +81,25 @@ export class TelegramProxyAgent extends Agent {
     super.destroy();
   }
 
-  async #openTunnel(req: ClientRequest, options: AgentConnectOpts, signal: AbortSignal) {
-    const proxy = this.#proxy;
-    if (proxy.protocol.startsWith('socks5')) {
-      if (!options.secureEndpoint || !options.host) throw new Error('SOCKS5 требует HTTPS-адрес');
-      const { host, port, servername } = options;
-      const socket = await connectSocks5(proxy, { host, port }, signal);
-      try {
-        // DNS fallback меняет адрес CONNECT, но не TLS-имя Telegram.
-        return connectTls({
-          ...options,
-          path: undefined,
-          servername: servername ?? (isIP(host) ? undefined : host),
-          socket,
-        });
-      } catch (error) {
-        socket.destroy();
-        throw error;
-      }
+  async #openTunnel(options: AgentConnectOpts, signal: AbortSignal, afterAddress?: string) {
+    if (!options.secureEndpoint || !options.host) throw new Error('Прокси требует HTTPS-адрес');
+    const { host, port, servername } = options;
+    const target = { host, port };
+    const socket = this.#proxy.protocol.startsWith('socks5')
+      ? await connectSocks5(this.#proxy, target, signal)
+      : await openHttpTunnel(this.#proxy, target, signal, afterAddress);
+    try {
+      signal.throwIfAborted();
+      // Выбор IP для прокси и SOCKS CONNECT не меняет TLS-имя Bot API.
+      return connectTls({
+        ...options,
+        path: undefined,
+        servername: servername ?? (isIP(host) ? undefined : host),
+        socket,
+      });
+    } catch (error) {
+      socket.destroy();
+      throw error;
     }
-
-    // https-proxy-agent пишет URL в DEBUG. Передаём ему адрес без учётных данных,
-    // а заголовок авторизации строим только при CONNECT. Пул принадлежит этому агенту.
-    const address = new URL(proxy.href);
-    address.username = '';
-    address.password = '';
-    const credentials = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
-    return connectToProxy(address.hostname.replace(/^\[|\]$/g, ''), signal, (lookup) =>
-      new HttpsProxyAgent(address, {
-        ...lookup,
-        keepAlive: true,
-        signal,
-        headers: () =>
-          proxy.username || proxy.password
-            ? { 'Proxy-Authorization': `Basic ${Buffer.from(credentials).toString('base64')}` }
-            : {},
-      }).connect(req, options),
-    );
   }
 }

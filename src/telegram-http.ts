@@ -3,6 +3,7 @@ import { json as readJson } from 'node:stream/consumers';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { domainToASCII } from 'node:url';
+import { ProxyConnectError } from './http-connect';
 import { SocksAuthenticationError, SocksConnectError } from './socks5';
 import type { TelegramProxyAgent } from './telegram-proxy-agent';
 
@@ -67,6 +68,7 @@ interface TelegramHttpOptions {
   headers?: Record<string, string>;
   body?: string | FormData;
   signal?: AbortSignal;
+  afterProxyAddress?: string;
 }
 
 type TelegramHttpResponse = Pick<Response, 'ok' | 'status' | 'statusText' | 'json'>;
@@ -78,30 +80,23 @@ export async function requestTelegram(
 ): Promise<TelegramHttpResponse> {
   if (!agent) return fetch(url, options);
 
-  const { signal, body } = options;
+  const { signal, body, afterProxyAddress } = options;
   // На Node 18 с --no-experimental-fetch глобальных FormData и Response нет.
   const multipart = body === undefined || typeof body === 'string' ? undefined : new Response(body);
   try {
     return await new Promise<TelegramHttpResponse>((resolve, reject) => {
-      const req = agent.createRequest(url, {
-        method: options.method,
-        headers: multipart
-          ? { 'content-type': multipart.headers.get('content-type')! }
-          : options.headers,
-        signal,
-      });
+      const req = agent.createRequest(
+        url,
+        {
+          method: options.method,
+          headers: multipart
+            ? { 'content-type': multipart.headers.get('content-type')! }
+            : options.headers,
+          signal,
+        },
+        afterProxyAddress,
+      );
       req.once('error', reject);
-      req.once('proxyConnect', ({ statusCode }: { statusCode: number }) => {
-        if (statusCode !== 200) {
-          // Текст отказа CONNECT не является ответом Bot API и может содержать userinfo.
-          resolve({
-            ok: false,
-            status: statusCode,
-            statusText: `Proxy CONNECT failed (HTTP ${statusCode})`,
-            json: async () => ({}),
-          });
-        }
-      });
       req.once('response', (response) => {
         const status = response.statusCode ?? 502;
         // Как и fetch, возвращаем статус до чтения тела: обрыв JSON не отменяет HTTP 200.
@@ -121,7 +116,11 @@ export async function requestTelegram(
       }
     });
   } catch (error) {
-    if (error instanceof SocksAuthenticationError || error instanceof SocksConnectError)
+    if (
+      error instanceof ProxyConnectError ||
+      error instanceof SocksAuthenticationError ||
+      error instanceof SocksConnectError
+    )
       throw error;
     // Ошибки агента могут содержать разобранный запрос или ответ прокси, включая секреты.
     // Сохраняем для политики повторов только безопасный код Node, без исходной ошибки.

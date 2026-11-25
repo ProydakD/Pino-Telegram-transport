@@ -11,14 +11,14 @@ const tls = { cert: readFileSync(cert), key: readFileSync(join(__dirname, 'local
 const password = 'fixture:secret';
 const basicAuth = 'Basic ' + Buffer.from('user:' + password).toString('base64');
 
-async function listen(t, server) {
+async function listen(t, server, { host = '127.0.0.1', port = 0 } = {}) {
   const sockets = new Set();
   server.on('connection', (socket) => {
     sockets.add(socket);
     socket.on('error', () => socket.destroy());
     socket.once('close', () => sockets.delete(socket));
   });
-  server.listen(0, '127.0.0.1');
+  server.listen(port, host);
   await once(server, 'listening');
   t.after(
     () =>
@@ -62,7 +62,7 @@ function tunnel(socket, apiPort, ready) {
   socket.on('close', () => upstream.destroy());
 }
 
-async function startConnect(t, apiPort, protocol, auth = true) {
+async function startConnect(t, apiPort, protocol, auth = true, { onConnect, ...address } = {}) {
   const targets = [];
   const serverNames = [];
   let connections = 0;
@@ -73,18 +73,20 @@ async function startConnect(t, apiPort, protocol, auth = true) {
     targets.push(req.url);
     if (auth && req.headers['proxy-authorization'] !== basicAuth) {
       socket.end(`HTTP/1.1 407 ${password}\r\nContent-Length: 0\r\n\r\n`);
-    } else {
-      tunnel(socket, apiPort, 'HTTP/1.1 200 OK\r\n\r\n');
+      return;
     }
+    const accept = () => tunnel(socket, apiPort, 'HTTP/1.1 200 OK\r\n\r\n');
+    if (onConnect) onConnect(socket, accept);
+    else accept();
   });
-  const port = await listen(t, server);
+  const port = await listen(t, server, address);
   return {
     targets,
     serverNames,
     get connections() {
       return connections;
     },
-    url: `${protocol}://${auth ? 'user:' + encodeURIComponent(password) + '@' : ''}127.0.0.1:${port}`,
+    url: `${protocol}://${auth ? 'user:' + encodeURIComponent(password) + '@' : ''}${authority(address.host, port)}`,
   };
 }
 
@@ -99,7 +101,7 @@ async function startSocks(
   t,
   apiPort,
   protocol,
-  { credentials, beforeGreeting, connectReply } = {},
+  { credentials, beforeGreeting, connectReply, ...address } = {},
 ) {
   const targets = [];
   let authAttempts = 0;
@@ -143,7 +145,7 @@ async function startSocks(
     }
     handshake().catch(() => socket.destroy());
   });
-  const port = await listen(t, server);
+  const port = await listen(t, server, address);
   const userinfo = credentials
     ? `${encodeURIComponent(credentials.user)}:${encodeURIComponent(credentials.password)}@`
     : '';
@@ -152,8 +154,12 @@ async function startSocks(
     get authAttempts() {
       return authAttempts;
     },
-    url: `${protocol}://${userinfo}127.0.0.1:${port}`,
+    url: `${protocol}://${userinfo}${authority(address.host, port)}`,
   };
+}
+
+function authority(host = '127.0.0.1', port) {
+  return `${net.isIPv6(host) ? `[${host}]` : host}:${port}`;
 }
 
 module.exports = { cert, listen, startApi, startConnect, startSocks };

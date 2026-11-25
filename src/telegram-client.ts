@@ -1,4 +1,5 @@
 import { buildTelegramUrl, createRequestTimeout, waitForDelay } from './utils';
+import { ProxyConnectError } from './http-connect';
 import { ProxyRequestError, redactTelegramDiagnostic, requestTelegram } from './telegram-http';
 import { TelegramProxyAgent } from './telegram-proxy-agent';
 import { SocksAuthenticationError, SocksConnectError } from './socks5';
@@ -87,7 +88,7 @@ export class TelegramClient {
    * @param request Готовый Telegram-запрос, сформированный транспортом.
    */
   async send(request: TelegramRequest): Promise<void> {
-    await this.executeWithRetry(async () => {
+    await this.executeWithRetry(async (afterProxyAddress) => {
       if (this.options.send) {
         await this.options.send(request.payload, request.method);
         return;
@@ -105,6 +106,7 @@ export class TelegramClient {
             headers,
             body,
             signal: timeout.signal,
+            afterProxyAddress,
           },
           this.proxyAgent,
         );
@@ -138,13 +140,18 @@ export class TelegramClient {
           throw new TelegramDeliveryError(
             `Таймаут запроса к Telegram (${request.method}) после ${this.options.requestTimeoutMs} мс`,
             undefined,
-            error instanceof TelegramDeliveryError ? error.status : undefined,
+            error instanceof TelegramDeliveryError || error instanceof ProxyConnectError
+              ? error.status
+              : undefined,
             error,
             true,
           );
         }
         if (error instanceof TelegramDeliveryError) {
           throw error;
+        }
+        if (error instanceof ProxyConnectError) {
+          throw new TelegramDeliveryError(error.message, undefined, error.status, error);
         }
 
         const reason = (error as Error)?.message ?? 'неизвестная ошибка';
@@ -413,15 +420,18 @@ export class TelegramClient {
    *
    * @param operation Асинхронная операция отправки запроса.
    */
-  private async executeWithRetry(operation: () => Promise<void>): Promise<void> {
+  private async executeWithRetry(
+    operation: (afterProxyAddress?: string) => Promise<void>,
+  ): Promise<void> {
     const { retryAttempts, retryInitialDelay, retryBackoffFactor, retryMaxDelay } = this.options;
     let attempt = 0;
     let delay = retryInitialDelay;
+    let afterProxyAddress: string | undefined;
 
     while (attempt < retryAttempts) {
       this.signal.throwIfAborted();
       try {
-        await operation();
+        await operation(afterProxyAddress);
         return;
       } catch (error) {
         this.signal.throwIfAborted();
@@ -430,8 +440,18 @@ export class TelegramClient {
           throw error;
         }
 
-        const waitTime = this.resolveRetryDelay(error, delay);
+        const cause = error instanceof TelegramDeliveryError ? error.cause : undefined;
+        const proxyFailure = cause instanceof ProxyConnectError ? cause : undefined;
+        if (proxyFailure?.retryAfterMs !== undefined && proxyFailure.retryAfterMs > retryMaxDelay) {
+          // Этот отказ не откладывает очередь и не сдвигает IP для следующей записи.
+          throw error;
+        }
+        const waitTime = Math.max(
+          delay,
+          proxyFailure?.retryAfterMs ?? this.extractRetryAfter(error) ?? 0,
+        );
         await waitForDelay(waitTime, this.signal);
+        if (proxyFailure) afterProxyAddress = proxyFailure.address;
         const multiplied = delay * retryBackoffFactor;
         const nextBase = Math.max(multiplied, waitTime, retryInitialDelay);
         delay = Math.min(nextBase, retryMaxDelay);
@@ -448,10 +468,13 @@ export class TelegramClient {
   private isRetryable(error: unknown): boolean {
     if (error instanceof TelegramDeliveryError) {
       const { cause } = error;
-      // REP 2/7: правила прокси запрещают маршрут или прокси не поддерживает CONNECT.
+      // REP 2/7 окончательны; при удалённом DNS REP 8 нельзя обойти локальным lookup.
       if (
         cause instanceof SocksAuthenticationError ||
-        (cause instanceof SocksConnectError && (cause.reply === 2 || cause.reply === 7)) ||
+        (cause instanceof SocksConnectError &&
+          (cause.reply === 2 ||
+            cause.reply === 7 ||
+            (cause.reply === 8 && this.options.proxyUrl?.protocol === 'socks5h:'))) ||
         (cause instanceof ProxyRequestError && cause.code && TLS_VERIFICATION_CODES.has(cause.code))
       ) {
         return false;
@@ -468,23 +491,6 @@ export class TelegramClient {
       return true;
     }
     return false;
-  }
-
-  /**
-   * Рассчитывает задержку перед следующей попыткой с учётом retry_after.
-   *
-   * @param error Ошибка, полученная при отправке.
-   * @param fallback Базовая задержка.
-   * @returns Время ожидания в миллисекундах.
-   */
-  private resolveRetryDelay(error: unknown, fallback: number): number {
-    if (error instanceof TelegramDeliveryError) {
-      const retryAfter = this.extractRetryAfter(error);
-      if (retryAfter !== undefined) {
-        return Math.max(fallback, retryAfter);
-      }
-    }
-    return Math.max(0, fallback);
   }
 
   /**
@@ -507,7 +513,8 @@ export class TelegramClient {
    * @param error Ошибка доставки.
    * @returns Задержка в миллисекундах или undefined.
    */
-  private extractRetryAfter(error: TelegramDeliveryError): number | undefined {
+  private extractRetryAfter(error: unknown): number | undefined {
+    if (!(error instanceof TelegramDeliveryError)) return undefined;
     const parameters = error.response?.parameters as { retry_after?: number | string } | undefined;
     const candidate = parameters?.retry_after;
     if (candidate === undefined) {

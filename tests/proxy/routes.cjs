@@ -7,7 +7,8 @@ const test = require('node:test');
 const { setTimeout: delay } = require('node:timers/promises');
 const telegramTransport = require('../../dist').default;
 const { TelegramClient } = require('../../dist/telegram-client');
-const { normalizeOptions } = require('../../dist/utils');
+const utils = require('../../dist/utils');
+const { normalizeOptions } = utils;
 const { run, token } = require('./run.cjs');
 const { listen, startApi, startConnect, startSocks } = require('./servers.cjs');
 
@@ -388,6 +389,38 @@ for (const [reply, acceptsFallback] of [
     assert.equal(api.requests.length, acceptsFallback ? 1 : 0);
   });
 }
+
+test('SOCKS5h: REP 8 is terminal and never resolves the API hostname locally', async (t) => {
+  const api = await startApi(t);
+  const proxy = await startSocks(t, api.port, 'socks5h', { connectReply: () => 8 });
+  const hostname = 'telegram.fixture.invalid';
+  t.mock.method(utils, 'buildTelegramUrl', () => `https://${hostname}:${api.port}/sendMessage`);
+  const lookup = dns.lookup;
+  let targetLookups = 0;
+  t.mock.method(dns, 'lookup', (host, options, callback) => {
+    if (host !== hostname) return lookup(host, options, callback);
+    targetLookups++;
+    return lookup('127.0.0.1', options, callback);
+  });
+  const client = new TelegramClient(
+    normalizeOptions({
+      botToken: token,
+      chatId: 42,
+      proxyUrl: proxy.url,
+      retryAttempts: 3,
+      retryInitialDelay: 1,
+    }),
+  );
+  t.after(() => client.close());
+
+  const send = client.send({ method: 'sendMessage', payload: { chat_id: 42, text: 'refused' } });
+  const error = await send.catch((failure) => failure);
+  assert.deepEqual(proxy.targets, [{ type: 3, host: hostname, port: api.port }]);
+  assert.equal(targetLookups, 0);
+  assert.deepEqual(api.requests, []);
+  assert.equal(error?.cause?.reply, 8);
+  assert.match(error.message, /не поддерживает переданный тип адреса/);
+});
 
 for (const protocol of ['http', 'https', 'socks5h']) {
   test(`${protocol}: a stalled handshake times out and releases the socket`, async (t) => {

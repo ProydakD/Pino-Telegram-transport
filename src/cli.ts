@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
+import { ProxyConnectError } from './http-connect';
 import { buildTelegramUrl, createRequestTimeout } from './utils';
 import {
   parseProxyUrl,
@@ -624,6 +625,9 @@ async function callTelegram<T>(
       );
     }
 
+    if (error instanceof ProxyConnectError) {
+      throw new TelegramCliError(error.message, error.status);
+    }
     const reason = (error as Error | undefined)?.message ?? 'неизвестная ошибка';
     if (error instanceof TelegramCliError) {
       throw error;

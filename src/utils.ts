@@ -773,19 +773,25 @@ interface RequestTimeoutContext {
 
 export async function waitForDelay(ms: number, signal: AbortSignal): Promise<void> {
   signal.throwIfAborted();
-  if (ms <= 0) return;
-
-  await new Promise<void>((resolve, reject) => {
-    const abort = () => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', abort);
-      resolve();
-    }, ms);
-    signal.addEventListener('abort', abort, { once: true });
-  });
+  // Node заменяет задержку больше signed int32 на 1 мс. Не повторяем раньше подсказки.
+  const maxTimerDelay = 2 ** 31 - 1;
+  for (let remaining = Math.ceil(ms); remaining > 0; remaining -= maxTimerDelay) {
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      };
+      const timer = setTimeout(
+        () => {
+          signal.removeEventListener('abort', abort);
+          resolve();
+        },
+        Math.min(remaining, maxTimerDelay),
+      );
+      signal.addEventListener('abort', abort, { once: true });
+    });
+    signal.throwIfAborted();
+  }
 }
 
 /**

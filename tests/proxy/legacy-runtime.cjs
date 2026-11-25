@@ -9,6 +9,11 @@ const transport = join(__dirname, 'legacy-transport.cjs');
 function checkDebug(result, marker, action) {
   // При провале сообщаем только факт, не копируя потенциально чувствительный stderr.
   assert.ok(!result.stderr.includes(marker), `${action}: unexpected test token in HTTP debug`);
+  const encodedAuth = Buffer.from('user:fixture:secret').toString('base64');
+  assert.ok(
+    !/fixture(%3A|:)secret/i.test(result.output) && !result.output.includes(encodedAuth),
+    `${action}: proxy credentials in HTTP debug`,
+  );
   assert.ok(/HTTP \d+:/.test(result.stderr), `${action}: HTTP debug was not enabled`);
   assert.equal(result.code, 0, `${action} failed`);
 }
@@ -19,7 +24,7 @@ async function main() {
   const fixture = { after: (cleanup) => cleanups.unshift(cleanup) };
   try {
     const api = await startApi(fixture);
-    const http = await startConnect(fixture, api.port, 'http', false);
+    const http = await startConnect(fixture, api.port, 'http');
     const debug = { env: { NODE_DEBUG: 'http' } };
     checkDebug(await run(api, http.url, [cli, 'check'], debug), 'fixture-token', 'CLI check');
     assert.deepEqual(

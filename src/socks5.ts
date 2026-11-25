@@ -1,5 +1,4 @@
-import { once } from 'node:events';
-import { createConnection, isIP, Socket } from 'node:net';
+import { isIP, type Socket } from 'node:net';
 import { finished } from 'node:stream';
 import { connectToProxy, lookupAddresses } from './proxy-dns';
 
@@ -11,7 +10,8 @@ export class SocksAuthenticationError extends Error {
 
 export class SocksConnectError extends Error {
   constructor(readonly reply: number) {
-    super(`Прокси SOCKS5 отклонил CONNECT (код ${reply})`);
+    const explanation = reply === 8 ? ': не поддерживает переданный тип адреса' : '';
+    super(`Прокси SOCKS5 отклонил CONNECT (код ${reply})${explanation}`);
   }
 }
 
@@ -48,18 +48,9 @@ async function openSocksTunnel(
   target: { host: string; port: number },
   signal: AbortSignal,
 ): Promise<Socket> {
-  const host = proxy.hostname.replace(/^\[|\]$/g, '');
-  const socket = await connectToProxy(host, signal, async (lookup) => {
-    const connection = createConnection({
-      ...lookup,
-      host,
-      port: proxy.port ? Number(proxy.port) : 1080,
-      signal,
-    });
-    await once(connection, 'connect');
-    return connection;
-  });
-
+  const { socket } = await connectToProxy(proxy, signal);
+  const abort = () => socket.destroy();
+  signal.addEventListener('abort', abort, { once: true });
   try {
     signal.throwIfAborted();
     // Только CONNECT и методы без авторизации / логин-пароль (RFC 1928 и 1929).
@@ -114,6 +105,8 @@ async function openSocksTunnel(
   } catch (error) {
     socket.destroy();
     throw error;
+  } finally {
+    signal.removeEventListener('abort', abort);
   }
 }
 
