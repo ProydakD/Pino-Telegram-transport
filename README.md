@@ -136,7 +136,7 @@ When the log contains `err`, an **Error** section with `message` and `stack` is 
 - Retry delivery on 429 and 5xx responses.
 - Tune delays with `retryAttempts`, `retryInitialDelay`, `retryBackoffFactor`, `retryMaxDelay`.
 - Bound each attempt with `requestTimeoutMs` (`10000` ms by default). A timeout before the HTTP status can be retried; a broken response body after `2xx` does not repeat the POST.
-- Respect `retry_after` hints returned by Telegram.
+- Telegram's `parameters.retry_after` sets a minimum wait. The HTTP(S) proxy's `Retry-After` follows [separate rules](docs/configuration.en.md#client-behaviour): a hint above `retryMaxDelay` prevents a retry.
 - Set `retryAttempts: 1` to disable retries entirely.
 
 ## Working with Media

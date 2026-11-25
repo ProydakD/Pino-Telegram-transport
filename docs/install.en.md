@@ -4,10 +4,10 @@ English version · [Русская версия](install.ru.md)
 
 ## Requirements
 
-- Use Node.js 18 or newer (the built-in `fetch` API is required).
+- Use Node.js 18 or newer. Direct requests require the built-in `fetch`. Proxied GET and JSON do not; proxied binary uploads still require the built-in Web APIs.
 - Use Node.js 20 or newer when your project depends on `pino@10`.
 - Create a Telegram bot and make sure it can post to the target chats.
-- Allow outbound connections to `https://api.telegram.org`.
+- Allow access to `https://api.telegram.org` directly or through the configured proxy.
 
 ## Compatibility matrix
 

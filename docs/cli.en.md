@@ -19,6 +19,7 @@ The bundled command line utility helps you validate Telegram credentials before 
 - Set `TELEGRAM_PROXY_URL` or pass `--proxy-url` to route every step, including probe deletion, through the proxy. The flag wins over the environment. Use the environment rather than shell history for credentials.
 - Omit explicit flags if you export `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_THREAD_ID` in the environment.
 - Each CLI network request has a 10-second deadline, including proxy setup and reading the response. Steps in the same `check` invocation can reuse the tunnel.
+- The CLI can try another IP while connecting to the proxy, but it does not retry rejected CONNECT or Bot API requests.
 - An invalid [proxy URL](configuration.en.md#client-behaviour) or a failed check returns a non-zero exit code. If SOCKS5 refuses authentication, the diagnostic tells you to check the proxy credentials without printing them.
 
 ### Example

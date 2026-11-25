@@ -127,7 +127,7 @@ export interface TelegramTransportOptions {
   retryInitialDelay?: number;
   /** Множитель экспоненциального backoff. */
   retryBackoffFactor?: number;
-  /** Максимальная пауза между попытками (мс). */
+  /** Предел backoff и допустимой подсказки Retry-After от CONNECT (мс), не от Bot API. */
   retryMaxDelay?: number;
   /** Таймаут HTTP-запроса к Telegram (мс). 0 отключает таймаут встроенного клиента. */
   requestTimeoutMs?: number;
